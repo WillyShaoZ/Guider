@@ -21,7 +21,19 @@ final class AppState: ObservableObject {
     @AppStorage("emergencyContactName") var emergencyContactName: String = ""
     @AppStorage("dropDetectionEnabled") var dropDetectionEnabled = true
 
+    // Onboarding
+    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
+
     var hasEmergencyContact: Bool {
         !emergencyContact.isEmpty
+    }
+
+    var feedbackProfile: FeedbackProfile {
+        FeedbackProfile(
+            hapticEnabled: hapticEnabled,
+            audioEnabled: audioEnabled,
+            voiceEnabled: voiceEnabled,
+            sensitivity: Float(sensitivity)
+        )
     }
 }

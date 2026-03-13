@@ -125,6 +125,21 @@ struct MainView: View {
         .onReceive(dropDetector.dropSubject.receive(on: DispatchQueue.main)) { _ in
             handleDropDetected()
         }
+        .onChange(of: appState.sensitivity) { _, newValue in
+            detector.sensitivity = Float(newValue)
+        }
+        .onChange(of: appState.hapticEnabled) { _, _ in
+            feedbackManager.apply(profile: appState.feedbackProfile)
+        }
+        .onChange(of: appState.audioEnabled) { _, _ in
+            feedbackManager.apply(profile: appState.feedbackProfile)
+        }
+        .onChange(of: appState.voiceEnabled) { _, _ in
+            feedbackManager.apply(profile: appState.feedbackProfile)
+        }
+        .onReceive(lidarManager.$groundPlaneY) { groundY in
+            detector.groundPlaneY = groundY
+        }
         .onChange(of: emergencyAssistant.state) { _, newState in
             if newState == .idle {
                 // Emergency resolved — resume scanning
@@ -218,9 +233,8 @@ struct MainView: View {
         guard lidarManager.cameraPermission == .authorized else { return }
         lidarManager.start()
         appState.isScanning = true
-        feedbackManager.hapticEnabled = appState.hapticEnabled
-        feedbackManager.audioEnabled = appState.audioEnabled
-        feedbackManager.voiceEnabled = appState.voiceEnabled
+        detector.sensitivity = Float(appState.sensitivity)
+        feedbackManager.apply(profile: appState.feedbackProfile)
     }
 
     private func stopScanning() {
