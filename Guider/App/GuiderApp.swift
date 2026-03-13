@@ -4,6 +4,7 @@ import AVFoundation
 @main
 struct GuiderApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var lidarManager = LiDARSessionManager()
 
     init() {
         configureAudioSession()
@@ -11,8 +12,14 @@ struct GuiderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainView()
-                .environmentObject(appState)
+            if lidarManager.allPermissionsGranted {
+                MainView()
+                    .environmentObject(appState)
+                    .environmentObject(lidarManager)
+            } else {
+                PermissionView()
+                    .environmentObject(lidarManager)
+            }
         }
     }
 

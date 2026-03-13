@@ -5,7 +5,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Guider needs camera access to detect obstacles using LiDAR and depth sensing.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Guider may use the microphone for audio processing.</string>
+	<string>Guider uses the microphone to listen for your voice during emergency assistance checks.</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arkit</string>
