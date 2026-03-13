@@ -1,0 +1,33 @@
+name: Guider
+options:
+  bundleIdPrefix: com.willyshao
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+
+targets:
+  Guider:
+    type: application
+    platform: iOS
+    sources:
+      - Guider
+    info:
+      path: Guider/Info.plist
+      properties:
+        NSCameraUsageDescription: "Guider needs camera access to detect obstacles using LiDAR and depth sensing."
+        NSMicrophoneUsageDescription: "Guider uses the microphone to listen for your voice during emergency assistance checks."
+        NSSpeechRecognitionUsageDescription: "Guider uses speech recognition to understand your response during emergency assistance checks."
+        UIRequiredDeviceCapabilities: [arkit]
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.willyshao.guider
+            CFBundleURLSchemes: [guider]
+    settings:
+      base:
+        INFOPLIST_FILE: Guider/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.willyshao.guider
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: ""

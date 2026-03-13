@@ -1,3 +1,4 @@
+import Foundation
 import Combine
 
 final class FeedbackManager: ObservableObject {
@@ -7,6 +8,7 @@ final class FeedbackManager: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var previousZone: DistanceZone = .safe
+    private var previousDirection: ObstacleDirection = .center
 
     var hapticEnabled = true
     var audioEnabled = true
@@ -36,41 +38,37 @@ final class FeedbackManager: ObservableObject {
         let zone = result.overallZone
         let direction = result.closestObstacle?.direction ?? .center
 
-        // Stair detection — takes priority
-        if let stairResult = result.stairDetection, stairResult.isDetected {
-            if hapticEnabled {
-                hapticEngine.playStairAlert()
+        // Only update feedback when zone or direction actually changes
+        guard zone != previousZone || direction != previousDirection else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+
+            // Haptic feedback
+            if self.hapticEnabled {
+                self.hapticEngine.play(for: zone)
             }
-            if voiceEnabled {
-                voiceAnnouncer.announceStairs()
+
+            // Spatial audio
+            if self.audioEnabled {
+                self.spatialAudio.play(for: zone, direction: direction)
             }
-            previousZone = zone
-            return
-        }
 
-        // Haptic feedback
-        if hapticEnabled {
-            hapticEngine.play(for: zone)
-        }
-
-        // Spatial audio
-        if audioEnabled {
-            spatialAudio.play(for: zone, direction: direction)
-        }
-
-        // Voice announcement on zone change (only when getting closer)
-        if voiceEnabled && zone > previousZone {
-            if zone == .danger, let obstacle = result.closestObstacle {
-                voiceAnnouncer.announceObstacle(
-                    direction: obstacle.direction,
-                    distance: obstacle.distance
-                )
-            } else {
-                voiceAnnouncer.announceZoneChange(to: zone)
+            // Voice announcement on zone change (only when getting closer)
+            if self.voiceEnabled && zone > self.previousZone {
+                if zone == .danger, let obstacle = result.closestObstacle {
+                    self.voiceAnnouncer.announceObstacle(
+                        direction: obstacle.direction,
+                        distance: obstacle.distance
+                    )
+                } else {
+                    self.voiceAnnouncer.announceZoneChange(to: zone)
+                }
             }
-        }
 
-        previousZone = zone
+            self.previousZone = zone
+            self.previousDirection = direction
+        }
     }
 
     func stop() {

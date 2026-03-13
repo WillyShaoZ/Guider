@@ -9,106 +9,22 @@ struct MainView: View {
     @StateObject private var feedbackManager = FeedbackManager()
     @StateObject private var dropDetector = DropDetector()
     @StateObject private var emergencyAssistant = EmergencyAssistant()
-    @State private var showSettings = false
+    @StateObject private var objectRecognizer = ObjectRecognizer()
     @State private var synthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         ZStack {
-            // Emergency state: red background
             if appState.isEmergencyActive {
-                Color.red.opacity(0.3)
-                    .ignoresSafeArea()
+                emergencyView
+            } else if appState.currentMode == .navigation {
+                navigationModeView
             } else {
-                zoneBackgroundColor
-                    .ignoresSafeArea()
-            }
-
-            if appState.isEmergencyActive {
-                // Emergency visual (for sighted helpers)
-                VStack(spacing: 20) {
-                    Spacer()
-
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 100))
-                        .foregroundColor(.red)
-
-                    Text("Drop Detected")
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundColor(.red)
-
-                    Text(emergencyStatusText)
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-
-                    Spacer()
-
-                    Text("Tap anywhere to dismiss")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.secondary)
-
-                    Spacer()
-                        .frame(height: 40)
-                }
-            } else {
-                // Normal scanning visual — for sighted helpers or demos
-                VStack(spacing: 16) {
-                    Spacer()
-
-                    Image(systemName: zoneIcon)
-                        .font(.system(size: 100))
-                        .foregroundColor(zoneColor)
-
-                    Text(appState.currentZone.label)
-                        .font(.system(size: 44, weight: .bold))
-                        .foregroundColor(zoneColor)
-
-                    if appState.closestDistance < DistanceZone.maxDetectionRange {
-                        Text(String(format: "%.1f m", appState.closestDistance))
-                            .font(.system(size: 60, weight: .light, design: .monospaced))
-                            .foregroundColor(.primary)
-                    } else {
-                        Text("Clear")
-                            .font(.system(size: 48, weight: .light))
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    if appState.isScanning {
-                        Text("Scanning")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("Paused — Tap to resume")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-                        .frame(height: 40)
-                }
+                dailyModeView
             }
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 1) {
-            if appState.isEmergencyActive {
-                dismissEmergency()
-            } else {
-                toggleScanning()
-            }
-        }
-        .onLongPressGesture(minimumDuration: 1.0) {
-            guard !appState.isEmergencyActive else { return }
-            let generator = UIImpactFeedbackGenerator(style: .heavy)
-            generator.impactOccurred()
-            speak("Settings")
-            showSettings = true
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environmentObject(appState)
+            handleTap()
         }
         .onAppear {
             startUp()
@@ -117,6 +33,7 @@ struct MainView: View {
             shutdown()
         }
         .onReceive(detector.detectionSubject.receive(on: DispatchQueue.main)) { result in
+            guard appState.currentMode == .navigation else { return }
             appState.detectionResult = result
             appState.currentZone = result.overallZone
             appState.closestDistance = result.closestObstacle?.distance ?? .infinity
@@ -142,20 +59,216 @@ struct MainView: View {
         }
         .onChange(of: emergencyAssistant.state) { _, newState in
             if newState == .idle {
-                // Emergency resolved — resume scanning
                 appState.isEmergencyActive = false
-                if !appState.isScanning {
+                if appState.currentMode == .navigation && !appState.isScanning {
                     startScanning()
                     speak("Scanning resumed.")
                 }
             }
         }
+        .onChange(of: objectRecognizer.state) { _, newState in
+            if case .result(let description) = newState {
+                speak("I see: \(description)")
+            } else if case .error(let msg) = newState {
+                speak(msg)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .guiderSwitchMode)) { _ in
+            switchMode()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .guiderPause)) { _ in
+            handleTap()
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint(appState.isEmergencyActive
-            ? "Tap to dismiss the emergency alert."
-            : "Tap to pause or resume scanning. Hold for settings.")
+        .accessibilityHint(accessibilityHint)
         .accessibilityAddTraits(.allowsDirectInteraction)
+    }
+
+    // MARK: - Navigation Mode View
+
+    private var navigationModeView: some View {
+        ZStack {
+            zoneBackgroundColor
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Spacer()
+
+                // Mode indicator
+                Text("Navigation Mode")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(2)
+
+                Image(systemName: zoneIcon)
+                    .font(.system(size: 100))
+                    .foregroundColor(zoneColor)
+
+                Text(appState.currentZone.label)
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundColor(zoneColor)
+
+                if appState.closestDistance < DistanceZone.maxDetectionRange {
+                    Text(String(format: "%.1f m", appState.closestDistance))
+                        .font(.system(size: 60, weight: .light, design: .monospaced))
+                        .foregroundColor(.primary)
+                } else {
+                    Text("Clear")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                if appState.isScanning {
+                    Text("Scanning")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Paused — Tap to resume")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+                    .frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Daily Mode View
+
+    private var dailyModeView: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Spacer()
+
+                // Mode indicator
+                Text("Daily Mode")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(2)
+
+                Image(systemName: dailyModeIcon)
+                    .font(.system(size: 100))
+                    .foregroundColor(dailyModeColor)
+
+                Text(dailyModeStatusText)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                if case .result(let description) = objectRecognizer.state {
+                    Text(description)
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
+                Spacer()
+
+                Text("Tap to identify an object")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+                    .frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Emergency View
+
+    private var emergencyView: some View {
+        ZStack {
+            Color.red.opacity(0.3)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Spacer()
+
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 100))
+                    .foregroundColor(.red)
+
+                Text("Drop Detected")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(.red)
+
+                Text(emergencyStatusText)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                Spacer()
+
+                Text("Tap anywhere to dismiss")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+                    .frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Tap Handler
+
+    private func handleTap() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        if appState.isEmergencyActive {
+            dismissEmergency()
+        } else if appState.currentMode == .navigation {
+            toggleScanning()
+        } else {
+            // Daily mode — trigger object recognition
+            triggerObjectRecognition()
+        }
+    }
+
+    // MARK: - Mode Switching
+
+    func switchMode() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+
+        if appState.currentMode == .navigation {
+            // Switch to daily mode
+            stopScanning()
+            objectRecognizer.reset()
+            appState.currentMode = .daily
+            speak("Daily mode. Tap to identify objects.")
+        } else {
+            // Switch to navigation mode
+            objectRecognizer.reset()
+            appState.currentMode = .navigation
+            startScanning()
+            speak("Navigation mode. Scanning.")
+        }
+    }
+
+    // MARK: - Object Recognition
+
+    private func triggerObjectRecognition() {
+        if objectRecognizer.isFinished || objectRecognizer.state == .idle {
+            objectRecognizer.reset()
+            speak("Identifying...")
+            // Small delay so voice doesn't overlap with camera
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                objectRecognizer.recognize()
+            }
+        }
     }
 
     // MARK: - Lifecycle
@@ -166,12 +279,10 @@ struct MainView: View {
         feedbackManager.bind(to: detector)
         dropDetector.bind(to: lidarManager)
 
-        // Auto-start scanning — no button needed
         startScanning()
 
-        // Tell the user what's happening
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            speak("Guider is scanning. Tap anywhere to pause. Hold for settings.")
+            speak("Guider is scanning. Tap to pause.")
         }
     }
 
@@ -180,6 +291,7 @@ struct MainView: View {
         feedbackManager.shutdown()
         dropDetector.reset()
         emergencyAssistant.reset()
+        objectRecognizer.reset()
     }
 
     // MARK: - Emergency
@@ -187,9 +299,7 @@ struct MainView: View {
     private func handleDropDetected() {
         guard appState.dropDetectionEnabled else { return }
         appState.isEmergencyActive = true
-        // Pause obstacle feedback so it doesn't talk over the emergency
         feedbackManager.stop()
-        // Pass emergency contact info
         emergencyAssistant.emergencyContact = appState.emergencyContact
         emergencyAssistant.emergencyContactName = appState.emergencyContactName
         emergencyAssistant.trigger()
@@ -217,9 +327,6 @@ struct MainView: View {
     // MARK: - Scanning Control
 
     private func toggleScanning() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-
         if appState.isScanning {
             stopScanning()
             speak("Scanning paused. Tap to resume.")
@@ -256,7 +363,38 @@ struct MainView: View {
         synthesizer.speak(utterance)
     }
 
-    // MARK: - Visual Helpers (for sighted helpers / demo)
+    // MARK: - Daily Mode Helpers
+
+    private var dailyModeIcon: String {
+        switch objectRecognizer.state {
+        case .idle: return "camera.fill"
+        case .capturing: return "camera.shutter.button"
+        case .recognizing: return "sparkle.magnifyingglass"
+        case .result: return "checkmark.circle.fill"
+        case .error: return "xmark.circle.fill"
+        }
+    }
+
+    private var dailyModeColor: Color {
+        switch objectRecognizer.state {
+        case .idle: return .blue
+        case .capturing, .recognizing: return .orange
+        case .result: return .green
+        case .error: return .red
+        }
+    }
+
+    private var dailyModeStatusText: String {
+        switch objectRecognizer.state {
+        case .idle: return "Ready to Identify"
+        case .capturing: return "Capturing..."
+        case .recognizing: return "Recognizing..."
+        case .result: return "Identified"
+        case .error(let msg): return msg
+        }
+    }
+
+    // MARK: - Navigation Mode Helpers
 
     private var zoneIcon: String {
         switch appState.currentZone {
@@ -286,6 +424,12 @@ struct MainView: View {
     }
 
     private var accessibilityDescription: String {
+        if appState.isEmergencyActive {
+            return "Emergency. \(emergencyStatusText)"
+        }
+        if appState.currentMode == .daily {
+            return "Daily mode. \(dailyModeStatusText)"
+        }
         if !appState.isScanning {
             return "Guider is paused."
         }
@@ -293,5 +437,15 @@ struct MainView: View {
             return "Zone: \(appState.currentZone.label). Obstacle \(appState.closestDirection.rawValue) at \(String(format: "%.1f", appState.closestDistance)) meters."
         }
         return "Zone: safe. Path is clear."
+    }
+
+    private var accessibilityHint: String {
+        if appState.isEmergencyActive {
+            return "Tap to dismiss the emergency alert."
+        }
+        if appState.currentMode == .daily {
+            return "Tap to identify an object."
+        }
+        return "Tap to pause or resume scanning."
     }
 }
