@@ -17,7 +17,7 @@ final class ObstacleDetector: ObservableObject {
 
     func bind(to lidarManager: LiDARSessionManager) {
         lidarManager.depthSubject
-            .receive(on: DispatchQueue.global(qos: .userInteractive))
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
             .map { [weak self] depthData -> DetectionResult in
                 self?.detect(depthData: depthData) ?? .empty
             }
@@ -38,7 +38,7 @@ final class ObstacleDetector: ObservableObject {
         // Build obstacles from smoothed distances
         var obstacles: [Obstacle] = []
         for (direction, distance) in smoothed {
-            if distance < 5.0 { // Only report obstacles within 5m
+            if distance < DistanceZone.maxDetectionRange {
                 obstacles.append(Obstacle(distance: distance, direction: direction))
             }
         }
@@ -65,7 +65,13 @@ final class ObstacleDetector: ObservableObject {
 
             // Use median for robustness against outliers
             let sorted = history.sorted()
-            let median = sorted[sorted.count / 2]
+            let mid = sorted.count / 2
+            let median: Float
+            if sorted.count.isMultiple(of: 2) {
+                median = (sorted[mid - 1] + sorted[mid]) / 2.0
+            } else {
+                median = sorted[mid]
+            }
             result[direction] = median
         }
 

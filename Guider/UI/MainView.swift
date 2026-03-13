@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct MainView: View {
     @EnvironmentObject var appState: AppState
@@ -41,11 +42,16 @@ struct MainView: View {
             feedbackManager.prepare()
             detector.bind(to: lidarManager)
             feedbackManager.bind(to: detector)
-            bindDetectionToState()
         }
         .onDisappear {
             stopScanning()
             feedbackManager.shutdown()
+        }
+        .onReceive(detector.detectionSubject.receive(on: DispatchQueue.main)) { result in
+            appState.detectionResult = result
+            appState.currentZone = result.overallZone
+            appState.closestDistance = result.closestObstacle?.distance ?? .infinity
+            appState.closestDirection = result.closestObstacle?.direction ?? .center
         }
     }
 
@@ -97,7 +103,7 @@ struct MainView: View {
 
     private var distanceDisplay: some View {
         Group {
-            if appState.closestDistance < 5.0 {
+            if appState.closestDistance < DistanceZone.maxDetectionRange {
                 Text(String(format: "%.1f m", appState.closestDistance))
                     .font(.system(size: 64, weight: .light, design: .monospaced))
                     .foregroundColor(.primary)
@@ -124,7 +130,7 @@ struct MainView: View {
     }
 
     private func directionArrow(_ direction: ObstacleDirection) -> some View {
-        let isActive = appState.isScanning && appState.closestDirection == direction && appState.closestDistance < 5.0
+        let isActive = appState.isScanning && appState.closestDirection == direction && appState.closestDistance < DistanceZone.maxDetectionRange
 
         return Image(systemName: directionIcon(direction))
             .font(.system(size: 30))
@@ -194,18 +200,4 @@ struct MainView: View {
         appState.closestDistance = .infinity
     }
 
-    private func bindDetectionToState() {
-        detector.detectionSubject
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                appState.detectionResult = result
-                appState.currentZone = result.overallZone
-                appState.closestDistance = result.closestObstacle?.distance ?? .infinity
-                appState.closestDirection = result.closestObstacle?.direction ?? .center
-            }
-            .store(in: &cancellables)
-    }
-
-    // Need to store cancellables — use a wrapper since View is a struct
-    @State private var cancellables = Set<AnyCancellable>()
 }

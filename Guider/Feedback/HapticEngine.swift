@@ -36,9 +36,12 @@ final class HapticEngine {
 
         do {
             let pattern = try makePattern(for: zone)
-            let player = try engine?.makeAdvancedPlayer(with: pattern)
-            player?.loopEnabled = true
-            try player?.start(atTime: CHHapticTimeImmediate)
+            guard let player = try engine?.makeAdvancedPlayer(with: pattern) else {
+                print("[Haptic] Failed to create player")
+                return
+            }
+            player.loopEnabled = true
+            try player.start(atTime: CHHapticTimeImmediate)
             currentPlayer = player
         } catch {
             print("[Haptic] Failed to play pattern: \(error)")

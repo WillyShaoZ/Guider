@@ -18,6 +18,7 @@ final class FeedbackManager: ObservableObject {
     }
 
     func bind(to detector: ObstacleDetector) {
+        cancellables.removeAll()
         detector.detectionSubject
             .sink { [weak self] result in
                 self?.handleDetection(result)

@@ -21,11 +21,9 @@ struct DebugOverlayView: View {
                 .font(.caption2.monospaced())
                 .foregroundColor(.white)
 
-            if let result = Optional(appState.detectionResult) {
-                Text("Obstacles: \(result.obstacles.count)")
-                    .font(.caption2.monospaced())
-                    .foregroundColor(.white)
-            }
+            Text("Obstacles: \(appState.detectionResult.obstacles.count)")
+                .font(.caption2.monospaced())
+                .foregroundColor(.white)
         }
         .padding(8)
         .background(Color.black.opacity(0.7))

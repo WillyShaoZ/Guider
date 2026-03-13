@@ -1,4 +1,5 @@
 import SwiftUI
+import ARKit
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
@@ -65,5 +66,3 @@ struct SettingsView: View {
         ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
     }
 }
-
-import ARKit

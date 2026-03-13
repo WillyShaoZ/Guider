@@ -16,9 +16,12 @@ final class SpatialAudioEngine {
         engine.attach(environment)
 
         // Connect: player → environment → output
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1) else {
+            print("[Audio] Failed to create audio format")
+            return
+        }
         engine.connect(player, to: environment, format: format)
-        engine.connect(environment, to: engine.mainMixerNode, format: nil)
+        engine.connect(environment, to: engine.mainMixerNode, format: format)
 
         // Listener at origin
         environment.listenerPosition = AVAudio3DPoint(x: 0, y: 0, z: 0)
@@ -40,8 +43,10 @@ final class SpatialAudioEngine {
             return
         }
 
+        guard let playerNode = playerNode else { return }
+
         // Update spatial position based on direction
-        playerNode?.position = AVAudio3DPoint(
+        playerNode.position = AVAudio3DPoint(
             x: direction.spatialAngle * 2.0,
             y: 0,
             z: -1.0
@@ -49,14 +54,12 @@ final class SpatialAudioEngine {
 
         // Generate tone based on zone
         let frequency = toneFrequency(for: zone)
-        let buffer = generateTone(frequency: frequency, duration: toneDuration(for: zone))
+        guard let buffer = generateTone(frequency: frequency, duration: toneDuration(for: zone)) else { return }
 
-        guard let buffer = buffer else { return }
-
-        playerNode?.stop()
-        playerNode?.scheduleBuffer(buffer, at: nil, options: .loops)
-        playerNode?.play()
-        playerNode?.volume = volume(for: zone)
+        playerNode.stop()
+        playerNode.scheduleBuffer(buffer, at: nil, options: .loops)
+        playerNode.play()
+        playerNode.volume = volume(for: zone)
 
         currentZone = zone
     }
