@@ -7,7 +7,7 @@
 Guider is a native iOS app that uses the iPhone's LiDAR sensor to detect obstacles in real-time and deliver haptic/audio feedback to visually impaired users. The phone is worn on the chest via a lanyard mount, continuously scanning the environment ahead — functioning like a parking radar for pedestrians.
 
 **Target device**: iPhone Pro (12 Pro and later) with LiDAR scanner.
-**Fallback**: Ultrasonic/proximity sensor mode using Core Motion if LiDAR is unavailable at the hackathon.
+**Fallback (stretch goal)**: Vision-based depth estimation (Depth Anything v2 via Core ML) for non-LiDAR iPhones, if time permits.
 
 ---
 
@@ -24,55 +24,59 @@ Guider is a native iOS app that uses the iPhone's LiDAR sensor to detect obstacl
 
 ---
 
-## 3. Fallback Strategy — Motion Sensor Mode
+## 3. Fallback Strategy — Vision Depth Model (Stretch Goal)
 
-If LiDAR is not available (e.g., no iPhone Pro at the hackathon), we fall back to a **proximity detection mode using the iPhone's built-in motion sensors**:
+If LiDAR is not available (non-Pro iPhone) and time permits, we fall back to **monocular depth estimation using a vision model**. The key insight is that a vision model outputs a depth map — the same format as LiDAR — so the entire detection pipeline remains unchanged.
 
-| Sensor | What It Provides | How We Use It |
-|--------|-----------------|---------------|
-| **Accelerometer** | Device acceleration / sudden changes | Detect sudden stops, collisions, surface changes (e.g., stepping off a curb) |
-| **Gyroscope** | Device orientation / rotation | Detect tilting (going up/down stairs), sudden direction changes |
-| **Proximity sensor** | Near/far binary from front sensor | Detect very close objects in front of the phone |
-| **Barometer** | Atmospheric pressure changes | Detect elevation changes (stairs, ramps) |
-
-**Motion-only pipeline:**
 ```
-Core Motion sensors → Motion Analyzer → Event Classification → Haptic/Audio Feedback
+LiDAR depth map (Pro)  ──┐
+                          ├──▶  Obstacle Detection → Zones → Feedback
+Vision depth map (All) ──┘
 ```
 
-This mode won't provide real-time obstacle distance, but it can:
-- Detect **stairs/elevation changes** via barometer + accelerometer
-- Warn about **sudden surface changes** (curb, uneven ground)
-- Provide **orientation guidance** (tilt warnings)
-- Serve as a **proof-of-concept demo** at the hackathon
+| | LiDAR (Primary) | Vision Model (Fallback) |
+|---|---|---|
+| **Model** | ARKit LiDAR Scanner | Depth Anything v2 via Core ML |
+| **Depth type** | Absolute (meters) | Relative (needs calibration) |
+| **Accuracy** | cm-level | ~10–30 cm error |
+| **FPS** | 60 | 15–30 |
+| **Low light** | Works (IR-based) | Degrades |
+| **Device** | iPhone Pro only | Any iPhone |
 
-The feedback system (haptics + spatial audio) remains the same — only the input source changes.
+The 4 distance zones (>2m / 1–2m / 0.5–1m / <0.5m) are coarse enough that the vision model can handle them without cm precision.
+
+> **Priority**: This is a stretch goal. LiDAR is the primary focus for the hackathon. Vision fallback is only attempted if the core LiDAR pipeline is complete and stable.
 
 ---
 
-## 4. System Architecture (LiDAR Mode)
+## 4. System Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌───────────────────┐     ┌──────────────┐
-│  LiDAR +    │────▶│  ARKit       │────▶│  Obstacle          │────▶│  Feedback     │
-│  TrueDepth  │     │  Depth Map   │     │  Detection Engine  │     │  Manager      │
-│  Scanner    │     │  (60 fps)    │     │                    │     │              │
-└─────────────┘     └──────────────┘     │  - Region sampling │     │  ┌── Haptic  │
-                                         │  - Ground filtering│     │  │   (Core    │
-┌─────────────┐     ┌──────────────┐     │  - Zone classify   │     │  │   Haptics) │
-│  IMU /      │────▶│  Motion      │────▶│  - Stair detect    │     │  │           │
-│  Gyroscope  │     │  Compensator │     └───────────────────┘     │  ├── Audio   │
-└─────────────┘     └──────────────┘                                │  │   (Spatial │
-                                                                    │  │   Audio)   │
-                                                                    │  └── Voice   │
-                                                                    │      (AVSpeech)│
-                                                                    └──────────────┘
+┌─────────────┐     ┌──────────────┐
+│  LiDAR +    │────▶│  ARKit       │──┐
+│  TrueDepth  │     │  Depth Map   │  │
+│  (Pro only) │     │  (60 fps)    │  │
+└─────────────┘     └──────────────┘  │
+                                      ├──▶ ┌───────────────────┐     ┌──────────────┐
+┌─────────────┐     ┌──────────────┐  │    │  Obstacle          │────▶│  Feedback     │
+│  Camera     │────▶│  Depth       │──┘    │  Detection Engine  │     │  Manager      │
+│  (fallback) │     │  Anything v2 │       │                    │     │              │
+│             │     │  (15-30 fps) │       │  - Region sampling │     │  ┌── Haptic  │
+└─────────────┘     └──────────────┘       │  - Ground filtering│     │  │   (Core    │
+                                           │  - Zone classify   │     │  │   Haptics) │
+                                           │  - Stair detect    │     │  │           │
+                                           └───────────────────┘     │  ├── Audio   │
+                                                                      │  │   (Spatial │
+                                                                      │  │   Audio)   │
+                                                                      │  └── Voice   │
+                                                                      │      (AVSpeech)│
+                                                                      └──────────────┘
 ```
 
 ### Processing Pipeline (per frame)
 
 1. **Capture** — ARKit provides a dense depth map from LiDAR at up to 60 fps
-2. **Filter** — Discard ground plane using ARKit plane anchors; compensate for chest-mount tilt via gyroscope
+2. **Filter** — Discard ground plane using ARKit plane anchors
 3. **Sample** — Divide the depth map into a 3x3 grid (left/center/right × top/mid/bottom)
 4. **Classify** — Map the closest obstacle in each region to a distance zone
 5. **Feedback** — Trigger haptic pattern + spatial audio based on zone and direction
@@ -99,12 +103,12 @@ The feedback system (haptics + spatial audio) remains the same — only the inpu
 | **Language** | Swift 5.9+ | Native ARKit/CoreHaptics/AVFoundation access |
 | **UI** | SwiftUI | Declarative UI, VoiceOver-first design |
 | **Depth Sensing** | ARKit + LiDAR | Real-time depth map, plane detection, scene geometry |
+| **Depth Fallback** | Core ML + Depth Anything v2 | Vision-based depth for non-LiDAR iPhones (stretch goal) |
 | **Haptic Engine** | Core Haptics | Fine-grained vibration patterns per zone |
 | **Audio Engine** | AVAudioEngine | 3D spatial audio for directional cues |
 | **Voice** | AVSpeechSynthesizer | Object/stair voice announcements |
 | **ML (Phase 2)** | Core ML + Vision | Stair detection classifier, object recognition |
 | **Accessibility** | UIAccessibility | Full VoiceOver integration |
-| **Motion** | Core Motion | Gyroscope tilt compensation for chest mount |
 
 ### Why Native Swift?
 
@@ -125,10 +129,9 @@ Guider/
 ├── Core/
 │   ├── LiDARSessionManager.swift    # ARKit session + depth capture
 │   ├── DepthProcessor.swift         # Depth map → obstacle grid
-│   ├── MotionCompensator.swift      # Gyroscope tilt correction
 │   ├── ObstacleDetector.swift       # Zone classification engine
 │   ├── StairDetector.swift          # ML-based stair detection
-│   └── MotionAnalyzer.swift         # Fallback: accelerometer/gyro/barometer mode
+│   └── VisionDepthProvider.swift     # Fallback: Depth Anything v2 via Core ML (stretch goal)
 ├── Feedback/
 │   ├── FeedbackManager.swift        # Coordinates haptic + audio
 │   ├── HapticEngine.swift           # Core Haptics patterns
@@ -145,6 +148,7 @@ Guider/
 │   └── FeedbackProfile.swift        # User feedback preferences
 ├── Resources/
 │   ├── StairDetector.mlmodel        # Core ML stair classifier
+│   ├── DepthAnythingV2.mlmodel      # Vision depth model (stretch goal)
 │   └── Audio/                       # Spatial audio assets
 └── Tests/
     ├── DepthProcessorTests.swift
@@ -166,7 +170,6 @@ Guider/
 | Zone classification | Map distance → 4 zones | P0 |
 | Haptic feedback | 4 distinct vibration patterns | P0 |
 | Basic UI | Start/stop button, VoiceOver labels | P0 |
-| Motion compensation | Gyroscope-based tilt correction | P1 |
 
 **Deliverable**: App detects obstacles ahead and vibrates with intensity proportional to distance.
 
@@ -192,8 +195,9 @@ Guider/
 | Volume button shortcuts | Physical button to toggle modes | P1 |
 | Beta testing | Test with visually impaired users | P0 |
 | App Store submission | Metadata, screenshots, accessibility review | P0 |
+| **Vision depth fallback** | Integrate Depth Anything v2 for non-LiDAR devices | **Stretch** |
 
-**Deliverable**: Production-ready app on the App Store.
+**Deliverable**: Production-ready app on the App Store. Vision fallback if time permits.
 
 ---
 
@@ -202,7 +206,7 @@ Guider/
 | Challenge | Impact | Mitigation |
 |-----------|--------|------------|
 | **Ground false positives** | High — constant false alerts | ARKit plane detection filters floor; height threshold (ignore below 30cm) |
-| **Chest mount instability** | High — noisy depth readings | Gyroscope compensation; temporal smoothing (rolling average over 5 frames) |
+| **Chest mount instability** | High — noisy depth readings | Temporal smoothing (rolling average over 5 frames) |
 | **Battery drain** | High — LiDAR + haptics is power-hungry | Adaptive frame rate; process only center 60% of depth map |
 | **Stair detection accuracy** | Medium — critical safety feature | Dedicated Core ML model; supplement with depth gradient analysis |
 | **Outdoor sunlight interference** | Medium — LiDAR degrades in direct sunlight | Fuse LiDAR depth with camera-based depth hints from ARKit |
@@ -251,4 +255,4 @@ Guider/
 | **Implementation Difficulty** | Medium — MVP in 3 weeks; main challenge is tuning feedback UX |
 | **User Value** | High — zero additional hardware cost, solves real daily safety needs |
 | **Market Opportunity** | Strong — Chinese market has no mature LiDAR obstacle detection app |
-| **Biggest Risk** | Social acceptance of wearing phone on chest; LiDAR-only limits to Pro devices |
+| **Biggest Risk** | Social acceptance of wearing phone on chest; LiDAR-only limits to Pro devices (vision fallback mitigates if time permits) |
