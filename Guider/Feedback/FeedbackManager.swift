@@ -1,3 +1,4 @@
+import Foundation
 import Combine
 
 final class FeedbackManager: ObservableObject {
@@ -7,6 +8,7 @@ final class FeedbackManager: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var previousZone: DistanceZone = .safe
+    private var previousDirection: ObstacleDirection = .center
 
     var hapticEnabled = true
     var audioEnabled = true
@@ -29,31 +31,38 @@ final class FeedbackManager: ObservableObject {
     private func handleDetection(_ result: DetectionResult) {
         let zone = result.overallZone
         let direction = result.closestObstacle?.direction ?? .center
-        let distance = result.closestObstacle?.distance ?? .infinity
 
-        // Haptic feedback
-        if hapticEnabled {
-            hapticEngine.play(for: zone)
-        }
+        // Only update feedback when zone or direction actually changes
+        guard zone != previousZone || direction != previousDirection else { return }
 
-        // Spatial audio
-        if audioEnabled {
-            spatialAudio.play(for: zone, direction: direction)
-        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
 
-        // Voice announcement on zone change (only when getting closer)
-        if voiceEnabled && zone > previousZone {
-            if zone == .danger, let obstacle = result.closestObstacle {
-                voiceAnnouncer.announceObstacle(
-                    direction: obstacle.direction,
-                    distance: obstacle.distance
-                )
-            } else {
-                voiceAnnouncer.announceZoneChange(to: zone)
+            // Haptic feedback
+            if self.hapticEnabled {
+                self.hapticEngine.play(for: zone)
             }
-        }
 
-        previousZone = zone
+            // Spatial audio
+            if self.audioEnabled {
+                self.spatialAudio.play(for: zone, direction: direction)
+            }
+
+            // Voice announcement on zone change (only when getting closer)
+            if self.voiceEnabled && zone > self.previousZone {
+                if zone == .danger, let obstacle = result.closestObstacle {
+                    self.voiceAnnouncer.announceObstacle(
+                        direction: obstacle.direction,
+                        distance: obstacle.distance
+                    )
+                } else {
+                    self.voiceAnnouncer.announceZoneChange(to: zone)
+                }
+            }
+
+            self.previousZone = zone
+            self.previousDirection = direction
+        }
     }
 
     func stop() {

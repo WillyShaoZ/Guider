@@ -16,10 +16,26 @@ struct GuiderApp: App {
                 MainView()
                     .environmentObject(appState)
                     .environmentObject(lidarManager)
+                    .onOpenURL { url in
+                        handleURL(url)
+                    }
             } else {
                 PermissionView()
                     .environmentObject(lidarManager)
             }
+        }
+    }
+
+    private func handleURL(_ url: URL) {
+        guard url.scheme == "guider" else { return }
+
+        switch url.host {
+        case "switch":
+            NotificationCenter.default.post(name: .guiderSwitchMode, object: nil)
+        case "pause":
+            NotificationCenter.default.post(name: .guiderPause, object: nil)
+        default:
+            break
         }
     }
 

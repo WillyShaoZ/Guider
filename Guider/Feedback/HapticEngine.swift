@@ -68,12 +68,12 @@ final class HapticEngine {
             events = []
 
         case .caution:
-            // Light pulse every 0.5s
+            // Light pulse every 1.5s — gentle reminder, low power
             events = [
                 CHHapticEvent(
                     eventType: .hapticTransient,
                     parameters: [
-                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.3),
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.25),
                         CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.2)
                     ],
                     relativeTime: 0
@@ -81,39 +81,39 @@ final class HapticEngine {
                 CHHapticEvent(
                     eventType: .hapticTransient,
                     parameters: [
-                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.3),
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.25),
                         CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.2)
                     ],
-                    relativeTime: 0.5
+                    relativeTime: 1.5
                 )
             ]
 
         case .warning:
-            // Medium vibration every 0.2s
-            events = (0..<5).map { i in
+            // Medium vibration every 0.6s — noticeable but not draining
+            events = (0..<3).map { i in
                 CHHapticEvent(
                     eventType: .hapticTransient,
                     parameters: [
-                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
-                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5)
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.5),
+                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.4)
                     ],
-                    relativeTime: Double(i) * 0.2
+                    relativeTime: Double(i) * 0.6
                 )
             }
 
         case .danger:
-            // Strong continuous vibration
-            events = [
+            // Strong short bursts every 0.4s — urgent but not continuous
+            events = (0..<3).map { i in
                 CHHapticEvent(
                     eventType: .hapticContinuous,
                     parameters: [
-                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
-                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.9),
+                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.7)
                     ],
-                    relativeTime: 0,
-                    duration: 1.0
+                    relativeTime: Double(i) * 0.4,
+                    duration: 0.2
                 )
-            ]
+            }
         }
 
         return try CHHapticPattern(events: events, parameters: [])

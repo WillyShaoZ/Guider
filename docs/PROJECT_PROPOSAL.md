@@ -201,7 +201,73 @@ Guider/
 
 ---
 
-## 9. Key Technical Challenges
+## 9. Siri Shortcuts & Back Tap Integration
+
+### Overview
+
+Guider provides a **Siri Shortcut** that allows users to launch and control the app hands-free. Combined with iOS **Back Tap**, this gives visually impaired users a fully physical, zero-screen interaction model.
+
+### Siri Shortcut
+
+Using the iOS 17 App Intents framework, Guider exposes shortcuts such as:
+
+| Shortcut Phrase | Action |
+|----------------|--------|
+| "Hey Siri, open Guider" | Launch app and auto-start scanning |
+| "Hey Siri, start scanning" | Launch app or resume scanning |
+| "Hey Siri, stop Guider" | Pause scanning |
+
+Implementation requires an `AppIntent` struct and an `AppShortcutsProvider` — approximately 30–50 lines of code. Works with free Apple ID, no paid developer account needed.
+
+### Back Tap Integration
+
+iOS allows users to bind **double-tap or triple-tap on the back of the iPhone** to a Shortcut via:
+
+**Settings → Accessibility → Touch → Back Tap**
+
+Users can assign:
+- **Double Tap** → "Start Guider" (launch and scan)
+- **Triple Tap** → "Stop Guider" (pause scanning)
+
+#### Why Back Tap?
+
+| Approach | Problem |
+|----------|---------|
+| Volume buttons | Conflicts with actual volume adjustment |
+| Shake gesture | False triggers when phone is chest-mounted; violates no-motion-sensor constraint |
+| Voice commands | Battery drain from continuous mic listening; conflicts with VoiceOver; requires network for accurate recognition |
+| **Back Tap** | **No conflicts, no battery cost, no code needed — just a Siri Shortcut** |
+
+#### Advantages
+
+- **Zero extra battery cost** — Back Tap uses the accelerometer that's always on anyway
+- **No code changes needed** — iOS handles the tap detection; we only provide the Shortcut
+- **Physical and tactile** — user can feel the phone and tap without looking
+- **Works with phone on chest** — user can reach up and double-tap the back of the phone
+- **Demo-friendly** — impressive to show in a hackathon presentation
+
+#### User Setup (guided in onboarding)
+
+1. Open iPhone **Settings → Accessibility → Touch → Back Tap**
+2. Select **Double Tap** → choose **"Start Guider"** shortcut
+3. Select **Triple Tap** → choose **"Stop Guider"** shortcut
+4. Done — user can now physically control Guider without touching the screen
+
+### Interaction Model Summary
+
+| Action | Method |
+|--------|--------|
+| **Launch app** | "Hey Siri, open Guider" or Back Tap |
+| **Pause/Resume** | Tap screen anywhere, or Back Tap shortcut |
+| **Open Settings** | Long press screen (1 second) |
+| **Emergency dismiss** | Tap screen |
+| **All state changes** | Voice-announced automatically |
+
+This design ensures the app is fully operable without vision, combining Siri voice, Back Tap physical gestures, and simple screen touch.
+
+---
+
+## 10. Key Technical Challenges
 
 | Challenge | Impact | Mitigation |
 |-----------|--------|------------|
@@ -214,7 +280,7 @@ Guider/
 
 ---
 
-## 10. Competitor Landscape
+## 11. Competitor Landscape
 
 | App | Approach | Key Limitation | Our Advantage |
 |-----|----------|---------------|---------------|
@@ -226,7 +292,7 @@ Guider/
 
 ---
 
-## 11. Target Users
+## 12. Target Users
 
 - **Primary**: Visually impaired iPhone Pro users
 - **Secondary**: Elderly users with declining vision
@@ -234,7 +300,7 @@ Guider/
 
 ---
 
-## 12. Success Metrics
+## 13. Success Metrics
 
 | Metric | Target |
 |--------|--------|
@@ -247,7 +313,7 @@ Guider/
 
 ---
 
-## 13. Summary
+## 14. Summary
 
 | Dimension | Assessment |
 |-----------|------------|
