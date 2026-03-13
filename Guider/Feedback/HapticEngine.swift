@@ -54,6 +54,42 @@ final class HapticEngine {
         currentZone = .safe
     }
 
+    func playStairAlert() {
+        stop()
+
+        do {
+            // Distinct double-tap pattern: two sharp transients, repeated 3x at 0.3s intervals
+            var events: [CHHapticEvent] = []
+            for rep in 0..<3 {
+                let baseTime = Double(rep) * 0.3
+                events.append(CHHapticEvent(
+                    eventType: .hapticTransient,
+                    parameters: [
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
+                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.9)
+                    ],
+                    relativeTime: baseTime
+                ))
+                events.append(CHHapticEvent(
+                    eventType: .hapticTransient,
+                    parameters: [
+                        CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
+                        CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.9)
+                    ],
+                    relativeTime: baseTime + 0.08
+                ))
+            }
+
+            let pattern = try CHHapticPattern(events: events, parameters: [])
+            guard let player = try engine?.makeAdvancedPlayer(with: pattern) else { return }
+            player.loopEnabled = false
+            try player.start(atTime: CHHapticTimeImmediate)
+            currentPlayer = player
+        } catch {
+            print("[Haptic] Failed to play stair alert: \(error)")
+        }
+    }
+
     func shutdown() {
         stop()
         engine?.stop()

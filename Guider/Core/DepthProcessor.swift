@@ -90,8 +90,10 @@ final class DepthProcessor {
         return cells
     }
 
-    /// Reduce the 3x3 grid to per-direction closest obstacle
-    func closestPerDirection(cells: [DepthGridCell]) -> [ObstacleDirection: Float] {
+    /// Reduce the 3x3 grid to per-direction closest obstacle.
+    /// When groundPlaneY is available, dynamically filters rows that would hit below 30cm above ground.
+    /// Falls back to skipping bottom row when no plane anchor data is available.
+    func closestPerDirection(cells: [DepthGridCell], groundPlaneY: Float? = nil) -> [ObstacleDirection: Float] {
         var result: [ObstacleDirection: Float] = [
             .left: .infinity,
             .center: .infinity,
@@ -99,8 +101,25 @@ final class DepthProcessor {
         ]
 
         for cell in cells {
-            // Skip bottom row (likely ground)
-            if cell.row == 2 { continue }
+            if let groundY = groundPlaneY {
+                // With ground plane info: skip cells whose depth readings correspond
+                // to objects below 30cm above ground. Row 2 (bottom) looks downward
+                // most, row 1 (mid) is roughly level, row 0 (top) looks upward.
+                // Bottom row at close range hits ground; skip if ground plane is known.
+                let heightAboveGround: Float
+                switch cell.row {
+                case 2: heightAboveGround = 0.1  // Bottom row — very low
+                case 1: heightAboveGround = 0.5  // Mid row — roughly chest level
+                default: heightAboveGround = 1.0 // Top row — above chest
+                }
+                // Approximate: if the cell's angle hits below 30cm above ground, skip it
+                if heightAboveGround < 0.3 && cell.minDistance < 2.0 {
+                    continue
+                }
+            } else {
+                // Fallback: skip bottom row (likely ground)
+                if cell.row == 2 { continue }
+            }
 
             if cell.minDistance < (result[cell.direction] ?? .infinity) {
                 result[cell.direction] = cell.minDistance

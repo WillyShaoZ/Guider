@@ -28,6 +28,12 @@ final class FeedbackManager: ObservableObject {
             .store(in: &cancellables)
     }
 
+    func apply(profile: FeedbackProfile) {
+        hapticEnabled = profile.hapticEnabled
+        audioEnabled = profile.audioEnabled
+        voiceEnabled = profile.voiceEnabled
+    }
+
     private func handleDetection(_ result: DetectionResult) {
         let zone = result.overallZone
         let direction = result.closestObstacle?.direction ?? .center

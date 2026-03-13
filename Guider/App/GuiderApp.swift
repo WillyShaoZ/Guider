@@ -12,15 +12,15 @@ struct GuiderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if lidarManager.allPermissionsGranted {
-                MainView()
-                    .environmentObject(appState)
+            if !lidarManager.allPermissionsGranted {
+                PermissionView()
                     .environmentObject(lidarManager)
                     .onOpenURL { url in
                         handleURL(url)
                     }
             } else {
-                PermissionView()
+                MainView()
+                    .environmentObject(appState)
                     .environmentObject(lidarManager)
             }
         }

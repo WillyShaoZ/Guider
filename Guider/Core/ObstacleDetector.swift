@@ -3,7 +3,10 @@ import Combine
 
 final class ObstacleDetector: ObservableObject {
     private let depthProcessor = DepthProcessor()
+    private let stairDetector = StairDetector()
     private var cancellables = Set<AnyCancellable>()
+    var sensitivity: Float = 1.0
+    var groundPlaneY: Float?
 
     // Rolling average for temporal smoothing (5 frames)
     private var distanceHistory: [ObstacleDirection: [Float]] = [
@@ -30,7 +33,7 @@ final class ObstacleDetector: ObservableObject {
 
     private func detect(depthData: ARDepthData) -> DetectionResult {
         let cells = depthProcessor.process(depthData: depthData)
-        let perDirection = depthProcessor.closestPerDirection(cells: cells)
+        let perDirection = depthProcessor.closestPerDirection(cells: cells, groundPlaneY: groundPlaneY)
 
         // Apply temporal smoothing
         let smoothed = smooth(distances: perDirection)
@@ -39,15 +42,19 @@ final class ObstacleDetector: ObservableObject {
         var obstacles: [Obstacle] = []
         for (direction, distance) in smoothed {
             if distance < DistanceZone.maxDetectionRange {
-                obstacles.append(Obstacle(distance: distance, direction: direction))
+                obstacles.append(Obstacle(distance: distance, direction: direction, sensitivity: sensitivity))
             }
         }
 
         let closest = obstacles.min(by: { $0.distance < $1.distance })
 
+        // Stair detection
+        let stairResult = stairDetector.analyze(depthData: depthData)
+
         return DetectionResult(
             closestObstacle: closest,
             obstacles: obstacles,
+            stairDetection: stairResult,
             timestamp: Date()
         )
     }

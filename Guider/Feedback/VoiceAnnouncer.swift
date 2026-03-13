@@ -45,6 +45,10 @@ final class VoiceAnnouncer {
         }
     }
 
+    func announceStairs() {
+        announce("Stairs ahead")
+    }
+
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
     }

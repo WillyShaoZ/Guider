@@ -11,6 +11,11 @@ final class LiDARSessionManager: NSObject, ObservableObject {
     @Published var isLiDARAvailable = false
     @Published var cameraPermission: AVAuthorizationStatus
     @Published var micPermission: AVAuthorizationStatus
+    @Published var groundPlaneY: Float?
+
+    // Adaptive frame rate
+    private let motionClassifier = MotionClassifier()
+    private var frameCounter = 0
 
     var allPermissionsGranted: Bool {
         cameraPermission == .authorized && micPermission == .authorized
@@ -70,10 +75,26 @@ final class LiDARSessionManager: NSObject, ObservableObject {
 
 extension LiDARSessionManager: ARSessionDelegate {
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // Always send frames at full rate (DropDetector needs high temporal resolution)
         frameSubject.send(frame)
 
-        if let depthData = frame.smoothedSceneDepth ?? frame.sceneDepth {
-            depthSubject.send(depthData)
+        // Extract ground plane Y from horizontal plane anchors
+        let horizontalPlanes = frame.anchors.compactMap { $0 as? ARPlaneAnchor }.filter { $0.alignment == .horizontal }
+        if let lowestPlane = horizontalPlanes.min(by: { $0.transform.columns.3.y < $1.transform.columns.3.y }) {
+            DispatchQueue.main.async { [weak self] in
+                self?.groundPlaneY = lowestPlane.transform.columns.3.y
+            }
+        }
+
+        // Adaptive frame rate: walking = every 2nd frame (~30fps), stationary = every 4th (~15fps)
+        let motionState = motionClassifier.classify(frame: frame)
+        let skipRate = motionState == .walking ? 2 : 4
+        frameCounter += 1
+
+        if frameCounter % skipRate == 0 {
+            if let depthData = frame.smoothedSceneDepth ?? frame.sceneDepth {
+                depthSubject.send(depthData)
+            }
         }
     }
 
