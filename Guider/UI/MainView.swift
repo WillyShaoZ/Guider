@@ -1,51 +1,80 @@
 import SwiftUI
 import Combine
+import AVFoundation
 
 struct MainView: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var lidarManager = LiDARSessionManager()
+    @EnvironmentObject var lidarManager: LiDARSessionManager
     @StateObject private var detector = ObstacleDetector()
     @StateObject private var feedbackManager = FeedbackManager()
     @State private var showSettings = false
+    @State private var synthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         ZStack {
-            backgroundColor
+            zoneBackgroundColor
                 .ignoresSafeArea()
 
-            VStack(spacing: 40) {
+            // Minimal visual — only useful for sighted helpers or demos
+            VStack(spacing: 16) {
                 Spacer()
 
-                // Zone indicator
-                zoneDisplay
+                Image(systemName: zoneIcon)
+                    .font(.system(size: 100))
+                    .foregroundColor(zoneColor)
 
-                // Distance readout
-                distanceDisplay
+                Text(appState.currentZone.label)
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundColor(zoneColor)
 
-                // Direction indicator
-                directionDisplay
+                if appState.closestDistance < DistanceZone.maxDetectionRange {
+                    Text(String(format: "%.1f m", appState.closestDistance))
+                        .font(.system(size: 60, weight: .light, design: .monospaced))
+                        .foregroundColor(.primary)
+                } else {
+                    Text("Clear")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundColor(.secondary)
+                }
 
                 Spacer()
 
-                // Main scan button
-                scanButton
+                // Scanning status indicator
+                if appState.isScanning {
+                    Text("Scanning")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Paused — Tap to resume")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
 
-                // Settings button
-                settingsButton
+                Spacer()
+                    .frame(height: 40)
             }
-            .padding()
+        }
+        .contentShape(Rectangle())
+        // Tap anywhere: pause / resume
+        .onTapGesture(count: 1) {
+            toggleScanning()
+        }
+        // Long press: open settings
+        .onLongPressGesture(minimumDuration: 1.0) {
+            let generator = UIImpactFeedbackGenerator(style: .heavy)
+            generator.impactOccurred()
+            speak("Settings")
+            showSettings = true
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .environmentObject(appState)
         }
         .onAppear {
-            feedbackManager.prepare()
-            detector.bind(to: lidarManager)
-            feedbackManager.bind(to: detector)
+            startUp()
         }
         .onDisappear {
-            stopScanning()
-            feedbackManager.shutdown()
+            shutdown()
         }
         .onReceive(detector.detectionSubject.receive(on: DispatchQueue.main)) { result in
             appState.detectionResult = result
@@ -53,24 +82,78 @@ struct MainView: View {
             appState.closestDistance = result.closestObstacle?.distance ?? .infinity
             appState.closestDirection = result.closestObstacle?.direction ?? .center
         }
+        // VoiceOver: the entire screen is one element
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityHint("Tap to pause or resume scanning. Hold for settings.")
+        .accessibilityAddTraits(.allowsDirectInteraction)
     }
 
-    // MARK: - Zone Display
+    // MARK: - Lifecycle
 
-    private var zoneDisplay: some View {
-        VStack(spacing: 8) {
-            Image(systemName: zoneIcon)
-                .font(.system(size: 80))
-                .foregroundColor(zoneColor)
-                .accessibilityHidden(true)
+    private func startUp() {
+        feedbackManager.prepare()
+        detector.bind(to: lidarManager)
+        feedbackManager.bind(to: detector)
 
-            Text(appState.currentZone.label)
-                .font(.system(size: 36, weight: .bold))
-                .foregroundColor(zoneColor)
+        // Auto-start scanning — no button needed
+        startScanning()
+
+        // Tell the user what's happening
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            speak("Guider is scanning. Tap anywhere to pause. Hold for settings.")
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Zone: \(appState.currentZone.label)")
     }
+
+    private func shutdown() {
+        stopScanning()
+        feedbackManager.shutdown()
+    }
+
+    // MARK: - Scanning Control
+
+    private func toggleScanning() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        if appState.isScanning {
+            stopScanning()
+            speak("Scanning paused. Tap to resume.")
+        } else {
+            startScanning()
+            speak("Scanning resumed.")
+        }
+    }
+
+    private func startScanning() {
+        guard lidarManager.cameraPermission == .authorized else { return }
+        lidarManager.start()
+        appState.isScanning = true
+        feedbackManager.hapticEnabled = appState.hapticEnabled
+        feedbackManager.audioEnabled = appState.audioEnabled
+        feedbackManager.voiceEnabled = appState.voiceEnabled
+    }
+
+    private func stopScanning() {
+        lidarManager.stop()
+        detector.reset()
+        feedbackManager.stop()
+        appState.isScanning = false
+        appState.currentZone = .safe
+        appState.closestDistance = .infinity
+    }
+
+    // MARK: - Voice
+
+    private func speak(_ message: String) {
+        synthesizer.stopSpeaking(at: .immediate)
+        let utterance = AVSpeechUtterance(string: message)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        synthesizer.speak(utterance)
+    }
+
+    // MARK: - Visual Helpers (for sighted helpers / demo)
 
     private var zoneIcon: String {
         switch appState.currentZone {
@@ -90,7 +173,7 @@ struct MainView: View {
         }
     }
 
-    private var backgroundColor: Color {
+    private var zoneBackgroundColor: Color {
         switch appState.currentZone {
         case .safe: return Color(.systemBackground)
         case .caution: return Color.yellow.opacity(0.05)
@@ -99,105 +182,13 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Distance Display
-
-    private var distanceDisplay: some View {
-        Group {
-            if appState.closestDistance < DistanceZone.maxDetectionRange {
-                Text(String(format: "%.1f m", appState.closestDistance))
-                    .font(.system(size: 64, weight: .light, design: .monospaced))
-                    .foregroundColor(.primary)
-                    .accessibilityLabel(String(format: "%.1f meters", appState.closestDistance))
-            } else {
-                Text("Clear")
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundColor(.secondary)
-                    .accessibilityLabel("Path is clear")
-            }
+    private var accessibilityDescription: String {
+        if !appState.isScanning {
+            return "Guider is paused."
         }
-    }
-
-    // MARK: - Direction Display
-
-    private var directionDisplay: some View {
-        HStack(spacing: 30) {
-            directionArrow(.left)
-            directionArrow(.center)
-            directionArrow(.right)
+        if appState.closestDistance < DistanceZone.maxDetectionRange {
+            return "Zone: \(appState.currentZone.label). Obstacle \(appState.closestDirection.rawValue) at \(String(format: "%.1f", appState.closestDistance)) meters."
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Closest obstacle: \(appState.closestDirection.rawValue)")
+        return "Zone: safe. Path is clear."
     }
-
-    private func directionArrow(_ direction: ObstacleDirection) -> some View {
-        let isActive = appState.isScanning && appState.closestDirection == direction && appState.closestDistance < DistanceZone.maxDetectionRange
-
-        return Image(systemName: directionIcon(direction))
-            .font(.system(size: 30))
-            .foregroundColor(isActive ? zoneColor : .gray.opacity(0.3))
-    }
-
-    private func directionIcon(_ direction: ObstacleDirection) -> String {
-        switch direction {
-        case .left: return "arrow.left.circle.fill"
-        case .center: return "arrow.up.circle.fill"
-        case .right: return "arrow.right.circle.fill"
-        }
-    }
-
-    // MARK: - Scan Button
-
-    private var scanButton: some View {
-        Button(action: toggleScanning) {
-            HStack(spacing: 12) {
-                Image(systemName: appState.isScanning ? "stop.fill" : "play.fill")
-                Text(appState.isScanning ? "Stop Scanning" : "Start Scanning")
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(appState.isScanning ? Color.red : Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(16)
-        }
-        .accessibilityLabel(appState.isScanning ? "Stop scanning" : "Start scanning")
-        .accessibilityHint(appState.isScanning ? "Stops obstacle detection" : "Begins detecting obstacles ahead")
-    }
-
-    private var settingsButton: some View {
-        Button(action: { showSettings = true }) {
-            Image(systemName: "gearshape")
-                .font(.title2)
-                .foregroundColor(.secondary)
-        }
-        .accessibilityLabel("Settings")
-    }
-
-    // MARK: - Actions
-
-    private func toggleScanning() {
-        if appState.isScanning {
-            stopScanning()
-        } else {
-            startScanning()
-        }
-    }
-
-    private func startScanning() {
-        lidarManager.start()
-        appState.isScanning = true
-        feedbackManager.hapticEnabled = appState.hapticEnabled
-        feedbackManager.audioEnabled = appState.audioEnabled
-        feedbackManager.voiceEnabled = appState.voiceEnabled
-    }
-
-    private func stopScanning() {
-        lidarManager.stop()
-        detector.reset()
-        feedbackManager.stop()
-        appState.isScanning = false
-        appState.currentZone = .safe
-        appState.closestDistance = .infinity
-    }
-
 }

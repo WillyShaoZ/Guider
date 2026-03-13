@@ -1,4 +1,5 @@
 import ARKit
+import AVFoundation
 import Combine
 
 final class LiDARSessionManager: NSObject, ObservableObject {
@@ -8,16 +9,46 @@ final class LiDARSessionManager: NSObject, ObservableObject {
 
     @Published var isRunning = false
     @Published var isLiDARAvailable = false
+    @Published var cameraPermission: AVAuthorizationStatus
+    @Published var micPermission: AVAuthorizationStatus
+
+    var allPermissionsGranted: Bool {
+        cameraPermission == .authorized && micPermission == .authorized
+    }
 
     override init() {
+        cameraPermission = AVCaptureDevice.authorizationStatus(for: .video)
+        micPermission = AVCaptureDevice.authorizationStatus(for: .audio)
         super.init()
         isLiDARAvailable = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
         session.delegate = self
     }
 
+    func requestPermissions() async {
+        let cameraGranted = await AVCaptureDevice.requestAccess(for: .video)
+        await MainActor.run {
+            cameraPermission = cameraGranted ? .authorized : .denied
+        }
+
+        let micGranted = await AVCaptureDevice.requestAccess(for: .audio)
+        await MainActor.run {
+            micPermission = micGranted ? .authorized : .denied
+        }
+    }
+
+    func refreshPermissions() {
+        cameraPermission = AVCaptureDevice.authorizationStatus(for: .video)
+        micPermission = AVCaptureDevice.authorizationStatus(for: .audio)
+    }
+
     func start() {
         guard isLiDARAvailable else {
             print("[LiDAR] LiDAR not available on this device")
+            return
+        }
+
+        guard cameraPermission == .authorized else {
+            print("[LiDAR] Camera permission not granted")
             return
         }
 
