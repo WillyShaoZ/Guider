@@ -26,10 +26,27 @@ final class FeedbackManager: ObservableObject {
             .store(in: &cancellables)
     }
 
+    func apply(profile: FeedbackProfile) {
+        hapticEnabled = profile.hapticEnabled
+        audioEnabled = profile.audioEnabled
+        voiceEnabled = profile.voiceEnabled
+    }
+
     private func handleDetection(_ result: DetectionResult) {
         let zone = result.overallZone
         let direction = result.closestObstacle?.direction ?? .center
-        let distance = result.closestObstacle?.distance ?? .infinity
+
+        // Stair detection — takes priority
+        if let stairResult = result.stairDetection, stairResult.isDetected {
+            if hapticEnabled {
+                hapticEngine.playStairAlert()
+            }
+            if voiceEnabled {
+                voiceAnnouncer.announceStairs()
+            }
+            previousZone = zone
+            return
+        }
 
         // Haptic feedback
         if hapticEnabled {

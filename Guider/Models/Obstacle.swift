@@ -21,22 +21,29 @@ struct Obstacle: Identifiable {
     let zone: DistanceZone
     let timestamp: Date
 
-    init(distance: Float, direction: ObstacleDirection) {
+    init(distance: Float, direction: ObstacleDirection, sensitivity: Float = 1.0) {
         self.distance = distance
         self.direction = direction
-        self.zone = DistanceZone.from(distance: distance)
+        self.zone = DistanceZone.from(distance: distance, sensitivity: sensitivity)
         self.timestamp = Date()
     }
+}
+
+struct StairDetectionResult {
+    let isDetected: Bool
+    let confidence: Float
+    let distance: Float
 }
 
 struct DetectionResult {
     let closestObstacle: Obstacle?
     let obstacles: [Obstacle]
+    let stairDetection: StairDetectionResult?
     let timestamp: Date
 
     var overallZone: DistanceZone {
         obstacles.map(\.zone).max() ?? .safe
     }
 
-    static let empty = DetectionResult(closestObstacle: nil, obstacles: [], timestamp: Date())
+    static let empty = DetectionResult(closestObstacle: nil, obstacles: [], stairDetection: nil, timestamp: Date())
 }

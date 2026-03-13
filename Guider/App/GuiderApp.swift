@@ -12,12 +12,15 @@ struct GuiderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if lidarManager.allPermissionsGranted {
+            if !lidarManager.allPermissionsGranted {
+                PermissionView()
+                    .environmentObject(lidarManager)
+            } else if !appState.hasCompletedOnboarding {
+                OnboardingView()
+                    .environmentObject(appState)
+            } else {
                 MainView()
                     .environmentObject(appState)
-                    .environmentObject(lidarManager)
-            } else {
-                PermissionView()
                     .environmentObject(lidarManager)
             }
         }
