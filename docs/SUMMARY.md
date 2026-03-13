@@ -53,3 +53,31 @@ Guider is a LiDAR-based obstacle detection iOS app for visually impaired users. 
   - Announces close ("Closing settings")
 - Updated `GuiderApp` to conditionally show `PermissionView` or `MainView` based on permission state
 - Updated `Info.plist` microphone usage description for emergency assistance feature
+
+### 5. Phone Drop Detection & Emergency Assistance
+
+- **DropDetector** (`Core/DropDetector.swift`) — detects phone falls using ARKit's camera transform:
+  - Monitors device Y-position (height) from `ARFrame.camera.transform` at 60fps
+  - Triggers when Y drops 40cm+ within a 0.5s window (rapid freefall)
+  - 10s cooldown to prevent repeated triggers
+  - Uses ARKit visual-inertial odometry — no motion sensors (per project constraints)
+- **EmergencyAssistant** (`Core/EmergencyAssistant.swift`) — orchestrates the full emergency flow:
+  1. Strong haptic burst (`UINotificationFeedbackGenerator`)
+  2. Voice prompt: "It seems like your phone dropped. Are you okay? Say yes, or say help."
+  3. Listens via `SFSpeechRecognizer` for up to 10 seconds
+  4. Positive response ("yes", "okay", "fine") → resolved, resumes scanning
+  5. Help request ("help", "no") or no response → escalate
+  6. Tap to dismiss at any time
+- **Escalation with emergency contact**:
+  - If contact is set: announces "Calling [name] for help" then dials via `tel://` URL
+  - If no contact: loud repeated voice alert for bystanders ("This person may need help")
+- **Emergency contact setup** in Settings:
+  - Drop detection toggle (on by default)
+  - Emergency contact name and phone number fields (persisted via `@AppStorage`)
+  - Status indicator showing whether contact is set
+  - Voice announces emergency contact status when settings open
+- **MainView integration**:
+  - DropDetector bound to LiDARSessionManager frame stream
+  - On drop: pauses obstacle feedback, triggers emergency flow
+  - Emergency state shown visually (red background, status text) for sighted helpers
+  - Tap to dismiss emergency, resumes scanning automatically

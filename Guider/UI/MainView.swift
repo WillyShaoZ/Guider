@@ -7,60 +7,100 @@ struct MainView: View {
     @EnvironmentObject var lidarManager: LiDARSessionManager
     @StateObject private var detector = ObstacleDetector()
     @StateObject private var feedbackManager = FeedbackManager()
+    @StateObject private var dropDetector = DropDetector()
+    @StateObject private var emergencyAssistant = EmergencyAssistant()
     @State private var showSettings = false
     @State private var synthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         ZStack {
-            zoneBackgroundColor
-                .ignoresSafeArea()
+            // Emergency state: red background
+            if appState.isEmergencyActive {
+                Color.red.opacity(0.3)
+                    .ignoresSafeArea()
+            } else {
+                zoneBackgroundColor
+                    .ignoresSafeArea()
+            }
 
-            // Minimal visual — only useful for sighted helpers or demos
-            VStack(spacing: 16) {
-                Spacer()
+            if appState.isEmergencyActive {
+                // Emergency visual (for sighted helpers)
+                VStack(spacing: 20) {
+                    Spacer()
 
-                Image(systemName: zoneIcon)
-                    .font(.system(size: 100))
-                    .foregroundColor(zoneColor)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 100))
+                        .foregroundColor(.red)
 
-                Text(appState.currentZone.label)
-                    .font(.system(size: 44, weight: .bold))
-                    .foregroundColor(zoneColor)
+                    Text("Drop Detected")
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundColor(.red)
 
-                if appState.closestDistance < DistanceZone.maxDetectionRange {
-                    Text(String(format: "%.1f m", appState.closestDistance))
-                        .font(.system(size: 60, weight: .light, design: .monospaced))
+                    Text(emergencyStatusText)
+                        .font(.system(size: 22, weight: .medium))
                         .foregroundColor(.primary)
-                } else {
-                    Text("Clear")
-                        .font(.system(size: 48, weight: .light))
-                        .foregroundColor(.secondary)
-                }
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
 
-                Spacer()
+                    Spacer()
 
-                // Scanning status indicator
-                if appState.isScanning {
-                    Text("Scanning")
+                    Text("Tap anywhere to dismiss")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(.secondary)
-                } else {
-                    Text("Paused — Tap to resume")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
 
-                Spacer()
-                    .frame(height: 40)
+                    Spacer()
+                        .frame(height: 40)
+                }
+            } else {
+                // Normal scanning visual — for sighted helpers or demos
+                VStack(spacing: 16) {
+                    Spacer()
+
+                    Image(systemName: zoneIcon)
+                        .font(.system(size: 100))
+                        .foregroundColor(zoneColor)
+
+                    Text(appState.currentZone.label)
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundColor(zoneColor)
+
+                    if appState.closestDistance < DistanceZone.maxDetectionRange {
+                        Text(String(format: "%.1f m", appState.closestDistance))
+                            .font(.system(size: 60, weight: .light, design: .monospaced))
+                            .foregroundColor(.primary)
+                    } else {
+                        Text("Clear")
+                            .font(.system(size: 48, weight: .light))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    if appState.isScanning {
+                        Text("Scanning")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Paused — Tap to resume")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+                        .frame(height: 40)
+                }
             }
         }
         .contentShape(Rectangle())
-        // Tap anywhere: pause / resume
         .onTapGesture(count: 1) {
-            toggleScanning()
+            if appState.isEmergencyActive {
+                dismissEmergency()
+            } else {
+                toggleScanning()
+            }
         }
-        // Long press: open settings
         .onLongPressGesture(minimumDuration: 1.0) {
+            guard !appState.isEmergencyActive else { return }
             let generator = UIImpactFeedbackGenerator(style: .heavy)
             generator.impactOccurred()
             speak("Settings")
@@ -82,10 +122,24 @@ struct MainView: View {
             appState.closestDistance = result.closestObstacle?.distance ?? .infinity
             appState.closestDirection = result.closestObstacle?.direction ?? .center
         }
-        // VoiceOver: the entire screen is one element
+        .onReceive(dropDetector.dropSubject.receive(on: DispatchQueue.main)) { _ in
+            handleDropDetected()
+        }
+        .onChange(of: emergencyAssistant.state) { _, newState in
+            if newState == .idle {
+                // Emergency resolved — resume scanning
+                appState.isEmergencyActive = false
+                if !appState.isScanning {
+                    startScanning()
+                    speak("Scanning resumed.")
+                }
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint("Tap to pause or resume scanning. Hold for settings.")
+        .accessibilityHint(appState.isEmergencyActive
+            ? "Tap to dismiss the emergency alert."
+            : "Tap to pause or resume scanning. Hold for settings.")
         .accessibilityAddTraits(.allowsDirectInteraction)
     }
 
@@ -95,6 +149,7 @@ struct MainView: View {
         feedbackManager.prepare()
         detector.bind(to: lidarManager)
         feedbackManager.bind(to: detector)
+        dropDetector.bind(to: lidarManager)
 
         // Auto-start scanning — no button needed
         startScanning()
@@ -108,6 +163,40 @@ struct MainView: View {
     private func shutdown() {
         stopScanning()
         feedbackManager.shutdown()
+        dropDetector.reset()
+        emergencyAssistant.reset()
+    }
+
+    // MARK: - Emergency
+
+    private func handleDropDetected() {
+        guard appState.dropDetectionEnabled else { return }
+        appState.isEmergencyActive = true
+        // Pause obstacle feedback so it doesn't talk over the emergency
+        feedbackManager.stop()
+        // Pass emergency contact info
+        emergencyAssistant.emergencyContact = appState.emergencyContact
+        emergencyAssistant.emergencyContactName = appState.emergencyContactName
+        emergencyAssistant.trigger()
+    }
+
+    private func dismissEmergency() {
+        emergencyAssistant.dismiss()
+    }
+
+    private var emergencyStatusText: String {
+        switch emergencyAssistant.state {
+        case .idle: return ""
+        case .asking: return "Asking if you're okay..."
+        case .listening: return "Listening for your response..."
+        case .resolved: return "You're okay. Resuming."
+        case .escalated:
+            if appState.hasEmergencyContact {
+                let name = appState.emergencyContactName.isEmpty ? appState.emergencyContact : appState.emergencyContactName
+                return "No response. Calling \(name)."
+            }
+            return "No response. Alerting nearby people."
+        }
     }
 
     // MARK: - Scanning Control
