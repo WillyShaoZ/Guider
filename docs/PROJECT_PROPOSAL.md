@@ -1,170 +1,254 @@
-# Guider - Obstacle Detection App for the Visually Impaired
+# Guider — LiDAR Obstacle Detection for the Visually Impaired
 
-## Overview
+## 1. Overview
 
-Guider is a mobile app that helps visually impaired users detect obstacles in real-time using their smartphone's sensors. The phone is placed on the user's chest (via a lanyard/mount), scanning the environment ahead and providing haptic/audio feedback to warn of nearby obstacles — similar to a car's parking radar.
+> **Context**: This is a hackathon project. Speed of implementation and a working demo take priority over production polish.
 
----
+Guider is a native iOS app that uses the iPhone's LiDAR sensor to detect obstacles in real-time and deliver haptic/audio feedback to visually impaired users. The phone is worn on the chest via a lanyard mount, continuously scanning the environment ahead — functioning like a parking radar for pedestrians.
 
-## Problem Statement
-
-- 253 million people worldwide live with visual impairment (WHO)
-- Existing solutions require expensive dedicated hardware ($300-600 for smart canes/wearables)
-- Most visually impaired users already own a smartphone
-- No widely adopted, high-quality obstacle detection app exists — especially in the Chinese market
+**Target device**: iPhone Pro (12 Pro and later) with LiDAR scanner.
+**Fallback**: Ultrasonic/proximity sensor mode using Core Motion if LiDAR is unavailable at the hackathon.
 
 ---
 
-## Core Features
+## 2. Problem Statement
 
-1. **Real-time obstacle detection** using LiDAR / dual camera / AI depth estimation
-2. **Haptic feedback** — vibration intensity increases as obstacles get closer
-3. **Spatial audio cues** — left/right directional sound to indicate obstacle position
-4. **Stair/step detection** — the most dangerous scenario for visually impaired users
-5. **Full VoiceOver accessibility** — the entire app is usable without sight
+| Fact | Source |
+|------|--------|
+| 253 million people worldwide live with visual impairment | WHO |
+| Dedicated assistive hardware costs $300–600 | Smart canes, wearable devices |
+| Most visually impaired users already own a smartphone | Global smartphone penetration |
+| No mature LiDAR obstacle detection app exists in the Chinese market | App Store research |
+
+**Opportunity**: Leverage hardware users already own (iPhone Pro LiDAR) to provide real-time obstacle avoidance at zero additional cost.
 
 ---
 
-## Technical Architecture
+## 3. Fallback Strategy — Motion Sensor Mode
+
+If LiDAR is not available (e.g., no iPhone Pro at the hackathon), we fall back to a **proximity detection mode using the iPhone's built-in motion sensors**:
+
+| Sensor | What It Provides | How We Use It |
+|--------|-----------------|---------------|
+| **Accelerometer** | Device acceleration / sudden changes | Detect sudden stops, collisions, surface changes (e.g., stepping off a curb) |
+| **Gyroscope** | Device orientation / rotation | Detect tilting (going up/down stairs), sudden direction changes |
+| **Proximity sensor** | Near/far binary from front sensor | Detect very close objects in front of the phone |
+| **Barometer** | Atmospheric pressure changes | Detect elevation changes (stairs, ramps) |
+
+**Motion-only pipeline:**
+```
+Core Motion sensors → Motion Analyzer → Event Classification → Haptic/Audio Feedback
+```
+
+This mode won't provide real-time obstacle distance, but it can:
+- Detect **stairs/elevation changes** via barometer + accelerometer
+- Warn about **sudden surface changes** (curb, uneven ground)
+- Provide **orientation guidance** (tilt warnings)
+- Serve as a **proof-of-concept demo** at the hackathon
+
+The feedback system (haptics + spatial audio) remains the same — only the input source changes.
+
+---
+
+## 4. System Architecture (LiDAR Mode)
 
 ```
-Camera/LiDAR → Depth Map → Obstacle Detection → Distance Zones → Feedback
-                                                        ├── Haptic (Core Haptics)
-                                                        └── Audio (Spatial Audio)
+┌─────────────┐     ┌──────────────┐     ┌───────────────────┐     ┌──────────────┐
+│  LiDAR +    │────▶│  ARKit       │────▶│  Obstacle          │────▶│  Feedback     │
+│  TrueDepth  │     │  Depth Map   │     │  Detection Engine  │     │  Manager      │
+│  Scanner    │     │  (60 fps)    │     │                    │     │              │
+└─────────────┘     └──────────────┘     │  - Region sampling │     │  ┌── Haptic  │
+                                         │  - Ground filtering│     │  │   (Core    │
+┌─────────────┐     ┌──────────────┐     │  - Zone classify   │     │  │   Haptics) │
+│  IMU /      │────▶│  Motion      │────▶│  - Stair detect    │     │  │           │
+│  Gyroscope  │     │  Compensator │     └───────────────────┘     │  ├── Audio   │
+└─────────────┘     └──────────────┘                                │  │   (Spatial │
+                                                                    │  │   Audio)   │
+                                                                    │  └── Voice   │
+                                                                    │      (AVSpeech)│
+                                                                    └──────────────┘
 ```
 
-### Distance Zones & Feedback
+### Processing Pipeline (per frame)
 
-| Zone | Distance | Haptic Feedback | Audio Feedback |
-|------|----------|----------------|----------------|
-| Safe | > 2m | None | None |
-| Caution | 1-2m | Light intermittent vibration | Low-frequency beep |
-| Warning | 0.5-1m | Medium continuous vibration | Mid-frequency beep |
-| Danger | < 0.5m | Strong continuous vibration | High-frequency rapid beep |
+1. **Capture** — ARKit provides a dense depth map from LiDAR at up to 60 fps
+2. **Filter** — Discard ground plane using ARKit plane anchors; compensate for chest-mount tilt via gyroscope
+3. **Sample** — Divide the depth map into a 3x3 grid (left/center/right × top/mid/bottom)
+4. **Classify** — Map the closest obstacle in each region to a distance zone
+5. **Feedback** — Trigger haptic pattern + spatial audio based on zone and direction
 
 ---
 
-## Tech Stack
+## 5. Distance Zones & Feedback Model
 
-| Component | Technology | Reason |
-|-----------|-----------|--------|
-| Language | **Swift** | Native access to ARKit, Core Haptics, AVFoundation |
-| Depth Sensing | **ARKit + LiDAR** | cm-level accuracy, 0-5m range, 60fps |
-| AI Depth (fallback) | **Core ML + Depth Anything** | Enables support for non-LiDAR devices |
-| Haptic Feedback | **Core Haptics** | Fine-grained vibration control |
-| Audio | **AVAudioEngine** | Spatial audio for directional cues |
-| Accessibility | **UIAccessibility** | Full VoiceOver integration |
+| Zone | Distance | Haptic | Audio | Trigger |
+|------|----------|--------|-------|---------|
+| **Safe** | > 2.0 m | None | None | — |
+| **Caution** | 1.0–2.0 m | Light pulse (0.5s interval) | Low tone, left/right panned | Closest obstacle enters zone |
+| **Warning** | 0.5–1.0 m | Medium vibration (0.2s interval) | Mid tone, rapid | Closest obstacle enters zone |
+| **Danger** | < 0.5 m | Strong continuous vibration | High tone + voice: "Obstacle, [direction]" | Immediate |
 
-### Why Swift (Native iOS)?
+**Stair detection** triggers a distinct vibration pattern + voice alert ("Stairs ahead") regardless of distance zone.
 
-- ARKit + LiDAR API is **only available natively** — no React Native/Flutter support
-- Core Haptics requires native access for fine-grained vibration patterns
-- Real-time camera processing needs minimal latency — native is fastest
+---
+
+## 6. Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Language** | Swift 5.9+ | Native ARKit/CoreHaptics/AVFoundation access |
+| **UI** | SwiftUI | Declarative UI, VoiceOver-first design |
+| **Depth Sensing** | ARKit + LiDAR | Real-time depth map, plane detection, scene geometry |
+| **Haptic Engine** | Core Haptics | Fine-grained vibration patterns per zone |
+| **Audio Engine** | AVAudioEngine | 3D spatial audio for directional cues |
+| **Voice** | AVSpeechSynthesizer | Object/stair voice announcements |
+| **ML (Phase 2)** | Core ML + Vision | Stair detection classifier, object recognition |
+| **Accessibility** | UIAccessibility | Full VoiceOver integration |
+| **Motion** | Core Motion | Gyroscope tilt compensation for chest mount |
+
+### Why Native Swift?
+
+- ARKit LiDAR API is **only available natively** — no cross-platform support
+- Core Haptics requires native access for sub-millisecond vibration control
+- Real-time 60fps depth processing demands minimal overhead
 - VoiceOver accessibility works best with native UIKit/SwiftUI
 
 ---
 
-## Device Compatibility Strategy
+## 7. Project Structure
 
-| Device | Sensor Used | Accuracy | Experience |
-|--------|------------|----------|------------|
-| **iPhone Pro** (12 Pro+) | LiDAR | cm-level | Best — full precision |
-| **Standard iPhone** (dual camera) | Stereo depth from dual cameras | ~10-20cm error | Good — reliable for basic avoidance |
-| **Any iPhone** (single camera) | AI depth estimation (Depth Anything model) | Rough estimate | Basic — can distinguish near/mid/far |
-
-This tiered approach ensures the app works on **all iPhones**, not just Pro models.
-
----
-
-## Competitor Analysis
-
-### International Apps
-
-| App | Price | Sensors | Strengths | Weaknesses |
-|-----|-------|---------|-----------|------------|
-| **Super Lidar** | Free | LiDAR only | MIT-backed, good audio mapping | LiDAR-only, no camera fallback |
-| **Obstacle Detector** | $5.99 | LiDAR + TrueDepth | cm-level accuracy, customizable alerts | LiDAR-only for rear camera |
-| **EyeGuide** | Free | LiDAR | Voice prompts, privacy-focused (local processing) | iOS only, LiDAR only |
-| **Be My Eyes** | Free | Camera | Connects to human volunteers | Not real-time obstacle detection |
-| **Seeing AI** (Microsoft) | Free | Camera | Object recognition, text reading | No obstacle avoidance |
-
-### Chinese Market Apps
-
-| App | Strengths | Weaknesses |
-|-----|-----------|------------|
-| **EasyWZA (轻松无障碍)** | Scans every 10s, identifies obstacle types | Not real-time, slow refresh |
-| **Bat Avoidance (蝙蝠避障)** | Sensor + image recognition | Limited adoption, basic feedback |
-
-### Our Competitive Advantages
-
-1. **Works on all iPhones** — AI depth fallback for non-LiDAR devices (competitors are LiDAR-only)
-2. **Chinese market gap** — no mature LiDAR obstacle detection app exists in China
-3. **Superior feedback** — fine-grained haptic zones + spatial audio (competitors have basic vibration)
-4. **Local scenarios** — optimized for Chinese urban environments (shared bikes, electric scooters, etc.)
-
----
-
-## Development Roadmap
-
-### Phase 1 — MVP (2-3 weeks)
-- iPhone Pro LiDAR support only
-- ARKit depth map → center-region obstacle detection
-- 4-zone haptic feedback (safe/caution/warning/danger)
-- Minimal UI, full VoiceOver compatibility
-- Basic settings (sensitivity, feedback mode)
-
-### Phase 2 — Enhanced Experience (2-3 weeks)
-- Spatial audio directional cues (left/right)
-- Stair/step detection model
-- Dual-camera depth support for standard iPhones
-- AI depth estimation fallback for single-camera devices
-
-### Phase 3 — Full Product (3-4 weeks)
-- Object recognition with voice announcements ("Chair detected, 2 meters ahead")
-- Route memory and navigation
-- Apple Watch companion app (wrist vibration feedback)
-- Usage analytics and battery optimization
+```
+Guider/
+├── App/
+│   ├── GuiderApp.swift              # App entry point
+│   └── AppState.swift               # Global app state
+├── Core/
+│   ├── LiDARSessionManager.swift    # ARKit session + depth capture
+│   ├── DepthProcessor.swift         # Depth map → obstacle grid
+│   ├── MotionCompensator.swift      # Gyroscope tilt correction
+│   ├── ObstacleDetector.swift       # Zone classification engine
+│   ├── StairDetector.swift          # ML-based stair detection
+│   └── MotionAnalyzer.swift         # Fallback: accelerometer/gyro/barometer mode
+├── Feedback/
+│   ├── FeedbackManager.swift        # Coordinates haptic + audio
+│   ├── HapticEngine.swift           # Core Haptics patterns
+│   ├── SpatialAudioEngine.swift     # 3D audio cues
+│   └── VoiceAnnouncer.swift         # Speech announcements
+├── UI/
+│   ├── MainView.swift               # Primary scanning view
+│   ├── SettingsView.swift           # User preferences
+│   ├── OnboardingView.swift         # First-launch tutorial
+│   └── DebugOverlayView.swift       # Dev-only depth visualization
+├── Models/
+│   ├── Obstacle.swift               # Obstacle data model
+│   ├── DistanceZone.swift           # Zone enum + thresholds
+│   └── FeedbackProfile.swift        # User feedback preferences
+├── Resources/
+│   ├── StairDetector.mlmodel        # Core ML stair classifier
+│   └── Audio/                       # Spatial audio assets
+└── Tests/
+    ├── DepthProcessorTests.swift
+    ├── ObstacleDetectorTests.swift
+    └── FeedbackManagerTests.swift
+```
 
 ---
 
-## Key Technical Challenges
+## 8. Development Roadmap
 
-| Challenge | Severity | Solution |
-|-----------|----------|----------|
-| Phone instability on chest | High | Design a chest mount accessory; use gyroscope to compensate for motion |
-| Battery drain | High | Reduce scan rate to 15fps; process only center region, not full frame |
-| Ground surface false positives | Medium | Use ARKit plane detection to filter ground; only detect waist-height and above |
-| Outdoor strong light interference | Medium | Fuse LiDAR + camera data for mutual compensation |
-| Stair/step detection | Medium | Train a dedicated CoreML model for downward stair detection |
-| App usability without sight | High | Full VoiceOver support; physical button (volume key) shortcuts |
+### Phase 1 — Core Detection (Weeks 1–3)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| ARKit LiDAR session | Set up depth capture at 60fps | P0 |
+| Depth processing | Sample center region, compute min distance | P0 |
+| Ground filtering | Use ARKit plane anchors to ignore floor | P0 |
+| Zone classification | Map distance → 4 zones | P0 |
+| Haptic feedback | 4 distinct vibration patterns | P0 |
+| Basic UI | Start/stop button, VoiceOver labels | P0 |
+| Motion compensation | Gyroscope-based tilt correction | P1 |
+
+**Deliverable**: App detects obstacles ahead and vibrates with intensity proportional to distance.
+
+### Phase 2 — Spatial Feedback (Weeks 4–5)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 3x3 grid sampling | Detect obstacle direction (left/center/right) | P0 |
+| Spatial audio | Pan audio cues based on obstacle position | P0 |
+| Stair detection | Train + integrate Core ML classifier | P0 |
+| Voice announcements | "Obstacle left", "Stairs ahead" | P1 |
+| Settings screen | Sensitivity, feedback mode, volume | P1 |
+
+**Deliverable**: App provides directional feedback and warns about stairs.
+
+### Phase 3 — Polish & Ship (Weeks 6–8)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| Onboarding flow | Accessible tutorial for first-time users | P0 |
+| Battery optimization | Adaptive frame rate (30fps walking, 15fps standing) | P0 |
+| Object recognition | Identify common obstacles (chair, pole, person) | P1 |
+| Volume button shortcuts | Physical button to toggle modes | P1 |
+| Beta testing | Test with visually impaired users | P0 |
+| App Store submission | Metadata, screenshots, accessibility review | P0 |
+
+**Deliverable**: Production-ready app on the App Store.
 
 ---
 
-## Target Users
+## 9. Key Technical Challenges
 
-- **Primary**: Visually impaired individuals who use iPhones
-- **Secondary**: Elderly with declining vision
-- **Tertiary**: Caregivers and accessibility organizations
-
----
-
-## Business Model Options
-
-| Model | Description |
-|-------|-------------|
-| **Freemium** | Basic detection free; advanced features (object recognition, spatial audio) as in-app purchase |
-| **One-time purchase** | ~$4.99-9.99, like Obstacle Detector |
-| **Free + donations** | Maximize adoption, accept donations |
-| **Partnership** | Partner with disability organizations / government accessibility programs |
+| Challenge | Impact | Mitigation |
+|-----------|--------|------------|
+| **Ground false positives** | High — constant false alerts | ARKit plane detection filters floor; height threshold (ignore below 30cm) |
+| **Chest mount instability** | High — noisy depth readings | Gyroscope compensation; temporal smoothing (rolling average over 5 frames) |
+| **Battery drain** | High — LiDAR + haptics is power-hungry | Adaptive frame rate; process only center 60% of depth map |
+| **Stair detection accuracy** | Medium — critical safety feature | Dedicated Core ML model; supplement with depth gradient analysis |
+| **Outdoor sunlight interference** | Medium — LiDAR degrades in direct sunlight | Fuse LiDAR depth with camera-based depth hints from ARKit |
+| **Feedback latency** | High — delay = danger | Target <50ms end-to-end; pre-load haptic patterns; avoid main thread blocking |
 
 ---
 
-## Summary
+## 10. Competitor Landscape
+
+| App | Approach | Key Limitation | Our Advantage |
+|-----|----------|---------------|---------------|
+| Super Lidar | LiDAR audio mapping | No haptic feedback | Multi-modal feedback (haptic + spatial audio + voice) |
+| Obstacle Detector | LiDAR + basic vibration | Single vibration level | 4-zone graduated haptic response |
+| EyeGuide | LiDAR + voice prompts | No directional cues | Spatial audio panning (left/center/right) |
+| Be My Eyes | Human volunteers | Not real-time | Autonomous real-time detection |
+| 轻松无障碍 | Camera, 10s intervals | Not real-time | 60fps continuous scanning |
+
+---
+
+## 11. Target Users
+
+- **Primary**: Visually impaired iPhone Pro users
+- **Secondary**: Elderly users with declining vision
+- **Tertiary**: Accessibility organizations and caregivers
+
+---
+
+## 12. Success Metrics
+
+| Metric | Target |
+|--------|--------|
+| Detection latency (end-to-end) | < 50 ms |
+| False positive rate | < 5% after ground filtering |
+| Stair detection recall | > 90% |
+| Battery life during continuous use | > 2 hours |
+| App Store accessibility rating | Full VoiceOver compliance |
+| Beta tester satisfaction | > 80% "would use daily" |
+
+---
+
+## 13. Summary
 
 | Dimension | Assessment |
 |-----------|------------|
-| Technical Feasibility | **High** — ARKit + LiDAR APIs are mature and well-documented |
-| Implementation Difficulty | **Medium** — MVP in 2-3 weeks; core challenge is tuning feedback UX |
-| User Value | **High** — zero additional hardware cost, solves a real daily pain point |
-| Market Opportunity | **Strong** — existing apps are LiDAR-only; Chinese market is underserved |
-| Biggest Risk | Phone placement may feel unnatural; social acceptance of wearing phone on chest |
+| **Technical Feasibility** | High — ARKit LiDAR APIs are mature, well-documented, 60fps capable |
+| **Implementation Difficulty** | Medium — MVP in 3 weeks; main challenge is tuning feedback UX |
+| **User Value** | High — zero additional hardware cost, solves real daily safety needs |
+| **Market Opportunity** | Strong — Chinese market has no mature LiDAR obstacle detection app |
+| **Biggest Risk** | Social acceptance of wearing phone on chest; LiDAR-only limits to Pro devices |
