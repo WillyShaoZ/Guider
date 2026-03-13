@@ -33,6 +33,8 @@ enum DistanceZone: Int, CaseIterable, Comparable {
         }
     }
 
+    static let maxDetectionRange: Float = 5.0
+
     static func from(distance: Float) -> DistanceZone {
         if distance < 0.5 { return .danger }
         if distance < 1.0 { return .warning }

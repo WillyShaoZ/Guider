@@ -9,11 +9,9 @@ struct DepthGridCell {
 
 final class DepthProcessor {
 
-    // Height threshold: ignore anything below 30cm (ground)
-    private let groundHeightThreshold: Float = 0.30
-
     /// Process an ARDepthData into a 3x3 grid of minimum distances.
     /// Returns the closest distance per column (left/center/right).
+    /// TODO: Phase 2 — use planeAnchors to filter ground surfaces
     func process(depthData: ARDepthData, planeAnchors: [ARPlaneAnchor] = []) -> [DepthGridCell] {
         let depthMap = depthData.depthMap
         let confidenceMap = depthData.confidenceMap
@@ -28,7 +26,7 @@ final class DepthProcessor {
         let floatBuffer = baseAddress.assumingMemoryBound(to: Float32.self)
 
         // Lock confidence map if available
-        var confidenceBuffer: UnsafeMutablePointer<UInt8>?
+        var confidenceBuffer: UnsafePointer<UInt8>?
         if let confMap = confidenceMap {
             CVPixelBufferLockBaseAddress(confMap, .readOnly)
             if let confBase = CVPixelBufferGetBaseAddress(confMap) {
@@ -70,7 +68,7 @@ final class DepthProcessor {
                         let depth = floatBuffer[idx]
 
                         // Skip invalid readings
-                        if depth.isNaN || depth <= 0 || depth > 5.0 { continue }
+                        if depth.isNaN || depth <= 0 || depth > DistanceZone.maxDetectionRange { continue }
 
                         // Skip low confidence readings (0 = low, 1 = medium, 2 = high)
                         if let conf = confidenceBuffer, conf[idx] < 1 { continue }
