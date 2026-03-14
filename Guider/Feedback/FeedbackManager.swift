@@ -35,6 +35,19 @@ final class FeedbackManager: ObservableObject {
     }
 
     private func handleDetection(_ result: DetectionResult) {
+        // Handle stair detection independently of obstacle zone changes
+        if let stair = result.stairDetection, stair.isDetected {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if self.hapticEnabled {
+                    self.hapticEngine.play(for: .danger)
+                }
+                if self.voiceEnabled {
+                    self.voiceAnnouncer.announceStairs()
+                }
+            }
+        }
+
         let zone = result.overallZone
         let direction = result.closestObstacle?.direction ?? .center
 
