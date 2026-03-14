@@ -1,6 +1,4 @@
 import AVFoundation
-import Vision
-import CoreML
 import UIKit
 import Speech
 
@@ -19,7 +17,7 @@ final class ObjectRecognizer: ObservableObject {
     private var captureSession: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
     private var delegate: PhotoDelegate?
-    private var vnModel: VNCoreMLModel?
+    private let geminiService = GeminiVisionService()
 
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -38,10 +36,6 @@ final class ObjectRecognizer: ObservableObject {
         "describe what you see",
         "look at this"
     ]
-
-    init() {
-        loadModel()
-    }
 
     func startVoiceAssistant() {
         guard state == .idle || isFinished else { return }
@@ -71,20 +65,6 @@ final class ObjectRecognizer: ObservableObject {
         switch state {
         case .result, .error: return true
         default: return false
-        }
-    }
-
-    // MARK: - Model Loading
-
-    private func loadModel() {
-        do {
-            let config = MLModelConfiguration()
-            config.computeUnits = .cpuAndNeuralEngine
-            let model = try MobileNetV2FP16(configuration: config)
-            vnModel = try VNCoreMLModel(for: model.model)
-            print("[ObjectRecognizer] MobileNetV2 loaded")
-        } catch {
-            print("[ObjectRecognizer] Failed to load model: \(error)")
         }
     }
 
@@ -124,7 +104,7 @@ final class ObjectRecognizer: ObservableObject {
                    self.matchesSceneQuery(text) {
                     self.stopListening()
                     DispatchQueue.main.async {
-                        self.state = .result("Yes")
+                        self.recognize()
                     }
                     return
                 }
@@ -217,9 +197,9 @@ final class ObjectRecognizer: ObservableObject {
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
 
-        let delegate = PhotoDelegate { [weak self] image in
-            if let image {
-                self?.classifyImage(image)
+        let delegate = PhotoDelegate { [weak self] imageData in
+            if let imageData {
+                self?.describeImageWithGemini(imageData)
             } else {
                 DispatchQueue.main.async {
                     self?.state = .error("Failed to capture photo")
@@ -242,97 +222,45 @@ final class ObjectRecognizer: ObservableObject {
 
     // MARK: - Image Understanding
 
-    private func classifyImage(_ image: CGImage) {
+    private func describeImageWithGemini(_ imageData: Data) {
         DispatchQueue.main.async { self.state = .recognizing }
 
-        guard let vnModel else {
-            DispatchQueue.main.async {
-                self.state = .error("Model not loaded")
-                self.tearDownCamera()
-            }
-            return
-        }
-
-        let request = VNCoreMLRequest(model: vnModel) { [weak self] request, error in
+        Task { [weak self] in
             guard let self else { return }
 
-            if let error {
-                DispatchQueue.main.async {
-                    self.state = .error("Recognition failed")
+            do {
+                let description = try await geminiService.describeImage(
+                    jpegData: imageData,
+                    prompt: "The user is visually impaired and asks what they are looking at. Give a short, direct description of the main object or scene in one or two sentences."
+                )
+
+                await MainActor.run {
+                    self.state = .result(description)
                     self.tearDownCamera()
                 }
-                print("[ObjectRecognizer] Error: \(error)")
-                return
-            }
-
-            guard let results = request.results as? [VNClassificationObservation] else {
-                DispatchQueue.main.async {
-                    self.state = .error("No results")
+            } catch {
+                await MainActor.run {
+                    self.state = .error(error.localizedDescription.isEmpty ? "Gemini request failed." : error.localizedDescription)
                     self.tearDownCamera()
                 }
-                return
-            }
-
-            let topResults = results
-                .prefix(3)
-                .filter { $0.confidence > 0.05 }
-                .map { observation -> (label: String, confidence: Int) in
-                    let name = observation.identifier
-                        .components(separatedBy: ",")
-                        .first?
-                        .trimmingCharacters(in: .whitespaces) ?? observation.identifier
-                    let cleanedName = name.replacingOccurrences(of: "_", with: " ")
-                    return (cleanedName, Int(observation.confidence * 100))
-                }
-
-            let description = self.buildSpokenDescription(from: topResults)
-
-            DispatchQueue.main.async {
-                self.state = .result(description)
-                self.tearDownCamera()
             }
         }
-        request.imageCropAndScaleOption = .centerCrop
-
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
-        DispatchQueue.global(qos: .userInitiated).async {
-            try? handler.perform([request])
-        }
-    }
-
-    private func buildSpokenDescription(from topResults: [(label: String, confidence: Int)]) -> String {
-        guard let bestMatch = topResults.first else {
-            return "I'm not confident enough to describe this scene."
-        }
-
-        if topResults.count == 1 {
-            return "This looks like \(bestMatch.label). Confidence \(bestMatch.confidence) percent."
-        }
-
-        let alternatives = topResults
-            .dropFirst()
-            .map { "\($0.label) \($0.confidence) percent" }
-            .joined(separator: ", ")
-
-        return "This looks like \(bestMatch.label). Confidence \(bestMatch.confidence) percent. Other possibilities: \(alternatives)."
     }
 }
 
 private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    let completion: (CGImage?) -> Void
+    let completion: (Data?) -> Void
 
-    init(completion: @escaping (CGImage?) -> Void) {
+    init(completion: @escaping (Data?) -> Void) {
         self.completion = completion
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         guard error == nil,
-              let data = photo.fileDataRepresentation(),
-              let uiImage = UIImage(data: data),
-              let cgImage = uiImage.cgImage else {
+              let data = photo.fileDataRepresentation() else {
             completion(nil)
             return
         }
-        completion(cgImage)
+        completion(data)
     }
 }
