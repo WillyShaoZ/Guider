@@ -34,10 +34,20 @@ final class HapticEngine {
 
         guard zone != .safe else { return }
 
+        // Restart engine if it was stopped (e.g. after returning from background)
+        if engine == nil {
+            prepare()
+        }
+
         do {
             let pattern = try makePattern(for: zone)
             guard let player = try engine?.makeAdvancedPlayer(with: pattern) else {
-                print("[Haptic] Failed to create player")
+                print("[Haptic] Failed to create player, retrying...")
+                prepare()
+                guard let retryPlayer = try engine?.makeAdvancedPlayer(with: pattern) else { return }
+                retryPlayer.loopEnabled = true
+                try retryPlayer.start(atTime: CHHapticTimeImmediate)
+                currentPlayer = retryPlayer
                 return
             }
             player.loopEnabled = true

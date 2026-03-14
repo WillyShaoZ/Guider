@@ -26,11 +26,23 @@ struct MainView: View {
         .onTapGesture(count: 1) {
             handleTap()
         }
+        .onLongPressGesture(minimumDuration: 0.8) {
+            switchMode()
+        }
         .onAppear {
             startUp()
         }
         .onDisappear {
             shutdown()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            feedbackManager.prepare()
+            if appState.isScanning {
+                lidarManager.start()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            feedbackManager.stop()
         }
         .onReceive(detector.detectionSubject.receive(on: DispatchQueue.main)) { result in
             guard appState.currentMode == .navigation else { return }
@@ -68,16 +80,10 @@ struct MainView: View {
         }
         .onChange(of: objectRecognizer.state) { _, newState in
             if case .result(let description) = newState {
-                speak("I see: \(description)")
+                speak(description)
             } else if case .error(let msg) = newState {
                 speak(msg)
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .guiderSwitchMode)) { _ in
-            switchMode()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .guiderPause)) { _ in
-            handleTap()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
@@ -175,7 +181,7 @@ struct MainView: View {
 
                 Spacer()
 
-                Text("Tap to identify an object")
+                Text("Tap to identify what's in front of you")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.secondary)
 
@@ -264,7 +270,6 @@ struct MainView: View {
         if objectRecognizer.isFinished || objectRecognizer.state == .idle {
             objectRecognizer.reset()
             speak("Identifying...")
-            // Small delay so voice doesn't overlap with camera
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 objectRecognizer.recognize()
             }
@@ -441,11 +446,11 @@ struct MainView: View {
 
     private var accessibilityHint: String {
         if appState.isEmergencyActive {
-            return "Tap to dismiss the emergency alert."
+            return "Tap to dismiss the emergency alert. Long press to switch modes."
         }
         if appState.currentMode == .daily {
-            return "Tap to identify an object."
+            return "Tap to identify what's in front of you. Long press to switch modes."
         }
-        return "Tap to pause or resume scanning."
+        return "Tap to pause or resume scanning. Long press to switch modes."
     }
 }

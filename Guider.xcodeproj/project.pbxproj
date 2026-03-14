@@ -27,10 +27,16 @@
 		FB443EBCB771C9E950F6222D /* MobileNetV2FP16.mlmodel in Sources */ = {isa = PBXBuildFile; fileRef = C135889A23F340F0AA735936 /* MobileNetV2FP16.mlmodel */; };
 		FB6A4A336F646C07F5BE41CB /* ObjectRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F60EE548264A310A7197EF9 /* ObjectRecognizer.swift */; };
 		FD67AC3B91A1EE7B26A17FA6 /* DistanceZone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F2492C128D8EC829A0BD8F /* DistanceZone.swift */; };
+		AA1B2C3D4E5F60718293A4B5 /* FeedbackProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2C3D4E5F60718293A4B5C6 /* FeedbackProfile.swift */; };
+		11223344AABBCCDD55667788 /* GeminiVisionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22334455BBCCDDEE66778899 /* GeminiVisionService.swift */; };
+		CC3D4E5F60718293A4B5C6D7 /* StairDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD4E5F60718293A4B5C6D7E8 /* StairDetector.swift */; };
+		EE5F60718293A4B5C6D7E8F9 /* MotionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF60718293A4B5C6D7E8F901 /* MotionClassifier.swift */; };
+		A1B2C3D4E5F607182930A4B5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F607182930A4B5C6 /* OnboardingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0F13385639E12F7529B528E1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		33445566AABBCCDD77889900 /* Secrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Secrets.plist; sourceTree = "<group>"; };
 		13CE7D95B39FE206A6B3C516 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		1BC8B8DA4AF64472727966CA /* Obstacle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Obstacle.swift; sourceTree = "<group>"; };
 		2C26432060C8251F9C7B203A /* EmergencyAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmergencyAssistant.swift; sourceTree = "<group>"; };
@@ -52,6 +58,11 @@
 		DF3E5C65E9D30C4FEDB3C4C0 /* VoiceAnnouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAnnouncer.swift; sourceTree = "<group>"; };
 		E82B5A16903BB25C74710FC3 /* DebugOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugOverlayView.swift; sourceTree = "<group>"; };
 		F2BC1EAB96D9D0BA291BB102 /* ObstacleDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObstacleDetector.swift; sourceTree = "<group>"; };
+		BB2C3D4E5F60718293A4B5C6 /* FeedbackProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackProfile.swift; sourceTree = "<group>"; };
+		22334455BBCCDDEE66778899 /* GeminiVisionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiVisionService.swift; sourceTree = "<group>"; };
+		DD4E5F60718293A4B5C6D7E8 /* StairDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StairDetector.swift; sourceTree = "<group>"; };
+		FF60718293A4B5C6D7E8F901 /* MotionClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionClassifier.swift; sourceTree = "<group>"; };
+		B2C3D4E5F607182930A4B5C6 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -61,9 +72,12 @@
 				3BFC09E37ADC32D1745816CD /* DepthProcessor.swift */,
 				65239848536DBC8C7AAD0174 /* DropDetector.swift */,
 				2C26432060C8251F9C7B203A /* EmergencyAssistant.swift */,
+				22334455BBCCDDEE66778899 /* GeminiVisionService.swift */,
 				CEDDFAB65730FDFD09FF79D1 /* LiDARSessionManager.swift */,
+				FF60718293A4B5C6D7E8F901 /* MotionClassifier.swift */,
 				9F60EE548264A310A7197EF9 /* ObjectRecognizer.swift */,
 				F2BC1EAB96D9D0BA291BB102 /* ObstacleDetector.swift */,
+				DD4E5F60718293A4B5C6D7E8 /* StairDetector.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -80,6 +94,7 @@
 			isa = PBXGroup;
 			children = (
 				0F13385639E12F7529B528E1 /* Info.plist */,
+				33445566AABBCCDD77889900 /* Secrets.plist */,
 				99A2F4555BAF05472EE863C1 /* App */,
 				3C586B38005E698F2E0684B8 /* Core */,
 				F2D86BBA977C72E3F7BB211A /* Feedback */,
@@ -95,6 +110,7 @@
 			children = (
 				E82B5A16903BB25C74710FC3 /* DebugOverlayView.swift */,
 				7B598B9731ABECAFB0EE3FD0 /* MainView.swift */,
+				B2C3D4E5F607182930A4B5C6 /* OnboardingView.swift */,
 				35F919C09B94809F217EF8B8 /* PermissionView.swift */,
 				86EB89ED4A238F571F697C7F /* SettingsView.swift */,
 			);
@@ -131,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				68F2492C128D8EC829A0BD8F /* DistanceZone.swift */,
+				BB2C3D4E5F60718293A4B5C6 /* FeedbackProfile.swift */,
 				1BC8B8DA4AF64472727966CA /* Obstacle.swift */,
 			);
 			path = Models;
@@ -219,6 +236,11 @@
 				4DC041F2332FEBB70EA00348 /* PermissionView.swift in Sources */,
 				D8A1D90E7D6B7DA6DE5DF79D /* SettingsView.swift in Sources */,
 				E33801EDEEBB0AFA3E48A490 /* SpatialAudioEngine.swift in Sources */,
+				AA1B2C3D4E5F60718293A4B5 /* FeedbackProfile.swift in Sources */,
+				11223344AABBCCDD55667788 /* GeminiVisionService.swift in Sources */,
+				CC3D4E5F60718293A4B5C6D7 /* StairDetector.swift in Sources */,
+				EE5F60718293A4B5C6D7E8F9 /* MotionClassifier.swift in Sources */,
+				A1B2C3D4E5F607182930A4B5 /* OnboardingView.swift in Sources */,
 				A95B2F06BB2AE540DE60B0CB /* VoiceAnnouncer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

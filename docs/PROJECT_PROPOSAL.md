@@ -6,8 +6,9 @@
 
 Guider is a native iOS app that uses the iPhone's LiDAR sensor to detect obstacles in real-time and deliver haptic/audio feedback to visually impaired users. The phone is worn on the chest via a lanyard mount, continuously scanning the environment ahead — functioning like a parking radar for pedestrians.
 
+It also features a Daily Mode with AI-powered object recognition (Gemini API online, Apple Vision offline) and an emergency assistance system with drop detection.
+
 **Target device**: iPhone Pro (12 Pro and later) with LiDAR scanner.
-**Fallback (stretch goal)**: Vision-based depth estimation (Depth Anything v2 via Core ML) for non-LiDAR iPhones, if time permits.
 
 ---
 
@@ -18,59 +19,37 @@ Guider is a native iOS app that uses the iPhone's LiDAR sensor to detect obstacl
 | 253 million people worldwide live with visual impairment | WHO |
 | Dedicated assistive hardware costs $300–600 | Smart canes, wearable devices |
 | Most visually impaired users already own a smartphone | Global smartphone penetration |
-| No mature LiDAR obstacle detection app exists in the Chinese market | App Store research |
 
 **Opportunity**: Leverage hardware users already own (iPhone Pro LiDAR) to provide real-time obstacle avoidance at zero additional cost.
 
 ---
 
-## 3. Fallback Strategy — Vision Depth Model (Stretch Goal)
-
-If LiDAR is not available (non-Pro iPhone) and time permits, we fall back to **monocular depth estimation using a vision model**. The key insight is that a vision model outputs a depth map — the same format as LiDAR — so the entire detection pipeline remains unchanged.
+## 3. System Architecture
 
 ```
-LiDAR depth map (Pro)  ──┐
-                          ├──▶  Obstacle Detection → Zones → Feedback
-Vision depth map (All) ──┘
-```
+┌─────────────┐     ┌──────────────┐     ┌───────────────────┐     ┌──────────────┐
+│  LiDAR +    │────▶│  ARKit       │────▶│  Obstacle          │────▶│  Feedback     │
+│  TrueDepth  │     │  Depth Map   │     │  Detection Engine  │     │  Manager      │
+│  (Pro only) │     │  (60 fps)    │     │                    │     │              │
+└─────────────┘     └──────────────┘     │  - Region sampling │     │  ┌── Haptic  │
+                                          │  - Ground filtering│     │  ├── Audio   │
+                                          │  - Zone classify   │     │  └── Voice   │
+                                          │  - Stair detect    │     └──────────────┘
+                                          └───────────────────┘
 
-| | LiDAR (Primary) | Vision Model (Fallback) |
-|---|---|---|
-| **Model** | ARKit LiDAR Scanner | Depth Anything v2 via Core ML |
-| **Depth type** | Absolute (meters) | Relative (needs calibration) |
-| **Accuracy** | cm-level | ~10–30 cm error |
-| **FPS** | 60 | 15–30 |
-| **Low light** | Works (IR-based) | Degrades |
-| **Device** | iPhone Pro only | Any iPhone |
+┌─────────────┐     ┌──────────────┐     ┌───────────────────┐
+│  Camera     │────▶│  Photo       │────▶│  Object            │────▶ Voice Announcement
+│  (on tap)   │     │  Capture     │     │  Recognition       │
+└─────────────┘     └──────────────┘     │  Online: Gemini AI │
+                                          │  Offline: Apple    │
+                                          │          Vision    │
+                                          └───────────────────┘
 
-The 4 distance zones (>2m / 1–2m / 0.5–1m / <0.5m) are coarse enough that the vision model can handle them without cm precision.
-
-> **Priority**: This is a stretch goal. LiDAR is the primary focus for the hackathon. Vision fallback is only attempted if the core LiDAR pipeline is complete and stable.
-
----
-
-## 4. System Architecture
-
-```
-┌─────────────┐     ┌──────────────┐
-│  LiDAR +    │────▶│  ARKit       │──┐
-│  TrueDepth  │     │  Depth Map   │  │
-│  (Pro only) │     │  (60 fps)    │  │
-└─────────────┘     └──────────────┘  │
-                                      ├──▶ ┌───────────────────┐     ┌──────────────┐
-┌─────────────┐     ┌──────────────┐  │    │  Obstacle          │────▶│  Feedback     │
-│  Camera     │────▶│  Depth       │──┘    │  Detection Engine  │     │  Manager      │
-│  (fallback) │     │  Anything v2 │       │                    │     │              │
-│             │     │  (15-30 fps) │       │  - Region sampling │     │  ┌── Haptic  │
-└─────────────┘     └──────────────┘       │  - Ground filtering│     │  │   (Core    │
-                                           │  - Zone classify   │     │  │   Haptics) │
-                                           │  - Stair detect    │     │  │           │
-                                           └───────────────────┘     │  ├── Audio   │
-                                                                      │  │   (Spatial │
-                                                                      │  │   Audio)   │
-                                                                      │  └── Voice   │
-                                                                      │      (AVSpeech)│
-                                                                      └──────────────┘
+┌─────────────┐     ┌──────────────┐     ┌───────────────────┐
+│  ARKit      │────▶│  Y-Position  │────▶│  Emergency         │────▶ Call / Bystander Alert
+│  Camera     │     │  Tracking    │     │  Assistant          │
+│  Transform  │     │              │     │  + Speech Recognition│
+└─────────────┘     └──────────────┘     └───────────────────┘
 ```
 
 ### Processing Pipeline (per frame)
@@ -83,216 +62,141 @@ The 4 distance zones (>2m / 1–2m / 0.5–1m / <0.5m) are coarse enough that th
 
 ---
 
-## 5. Distance Zones & Feedback Model
+## 4. Distance Zones & Feedback Model
 
 | Zone | Distance | Haptic | Audio | Trigger |
 |------|----------|--------|-------|---------|
 | **Safe** | > 2.0 m | None | None | — |
-| **Caution** | 1.0–2.0 m | Light pulse (0.5s interval) | Low tone, left/right panned | Closest obstacle enters zone |
-| **Warning** | 0.5–1.0 m | Medium vibration (0.2s interval) | Mid tone, rapid | Closest obstacle enters zone |
-| **Danger** | < 0.5 m | Strong continuous vibration | High tone + voice: "Obstacle, [direction]" | Immediate |
+| **Caution** | 1.0–2.0 m | Light pulse (1.5s interval) | Low tone, left/right panned | Closest obstacle enters zone |
+| **Warning** | 0.5–1.0 m | Medium vibration (0.6s interval) | Mid tone, rapid | Closest obstacle enters zone |
+| **Danger** | < 0.5 m | Strong burst (0.4s interval) | High tone + voice: "Obstacle, [direction]" | Immediate |
 
-**Stair detection** triggers a distinct vibration pattern + voice alert ("Stairs ahead") regardless of distance zone.
+**Stair detection** triggers a distinct double-tap vibration pattern + voice alert ("Stairs ahead") regardless of distance zone.
 
 ---
 
-## 6. Tech Stack
+## 5. Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | **Language** | Swift 5.9+ | Native ARKit/CoreHaptics/AVFoundation access |
 | **UI** | SwiftUI | Declarative UI, VoiceOver-first design |
-| **Depth Sensing** | ARKit + LiDAR | Real-time depth map, plane detection, scene geometry |
-| **Depth Fallback** | Core ML + Depth Anything v2 | Vision-based depth for non-LiDAR iPhones (stretch goal) |
+| **Depth Sensing** | ARKit + LiDAR | Real-time depth map, plane detection |
+| **Object Recognition (Online)** | Gemini API (gemini-2.5-flash) | AI-powered image description |
+| **Object Recognition (Offline)** | Apple Vision (VNClassifyImageRequest) | On-device classification (1000+ categories) |
+| **Network Detection** | Network framework (NWPathMonitor) | Auto online/offline switching |
 | **Haptic Engine** | Core Haptics | Fine-grained vibration patterns per zone |
 | **Audio Engine** | AVAudioEngine | 3D spatial audio for directional cues |
-| **Voice** | AVSpeechSynthesizer | Object/stair voice announcements |
-| **ML (Phase 2)** | Core ML + Vision | Stair detection classifier, object recognition |
+| **Voice** | AVSpeechSynthesizer | All voice announcements |
+| **Speech Recognition** | Speech framework | Emergency response + contact setup |
+| **Contacts** | Contacts framework | Voice-guided emergency contact lookup |
 | **Accessibility** | UIAccessibility | Full VoiceOver integration |
-
-### Why Native Swift?
-
-- ARKit LiDAR API is **only available natively** — no cross-platform support
-- Core Haptics requires native access for sub-millisecond vibration control
-- Real-time 60fps depth processing demands minimal overhead
-- VoiceOver accessibility works best with native UIKit/SwiftUI
 
 ---
 
-## 7. Project Structure
+## 6. Project Structure
 
 ```
 Guider/
 ├── App/
-│   ├── GuiderApp.swift              # App entry point
-│   └── AppState.swift               # Global app state
+│   ├── GuiderApp.swift           # App entry, onboarding routing
+│   ├── AppState.swift            # Global state, settings
+│   └── AppIntents.swift          # Siri Shortcuts
 ├── Core/
-│   ├── LiDARSessionManager.swift    # ARKit session + depth capture
-│   ├── DepthProcessor.swift         # Depth map → obstacle grid
-│   ├── ObstacleDetector.swift       # Zone classification engine
-│   ├── StairDetector.swift          # ML-based stair detection
-│   └── VisionDepthProvider.swift     # Fallback: Depth Anything v2 via Core ML (stretch goal)
+│   ├── LiDARSessionManager.swift # ARKit session + depth streaming
+│   ├── DepthProcessor.swift      # Depth map → 3x3 grid sampling
+│   ├── ObstacleDetector.swift    # Zone classification engine
+│   ├── StairDetector.swift       # Stair pattern detection
+│   ├── MotionClassifier.swift    # Walking/stationary for adaptive frame rate
+│   ├── ObjectRecognizer.swift    # Camera + online/offline recognition
+│   ├── GeminiVisionService.swift # Gemini API client
+│   ├── DropDetector.swift        # Phone fall detection via ARKit
+│   └── EmergencyAssistant.swift  # Emergency flow + bystander guidance
 ├── Feedback/
-│   ├── FeedbackManager.swift        # Coordinates haptic + audio
-│   ├── HapticEngine.swift           # Core Haptics patterns
-│   ├── SpatialAudioEngine.swift     # 3D audio cues
-│   └── VoiceAnnouncer.swift         # Speech announcements
-├── UI/
-│   ├── MainView.swift               # Primary scanning view
-│   ├── SettingsView.swift           # User preferences
-│   ├── OnboardingView.swift         # First-launch tutorial
-│   └── DebugOverlayView.swift       # Dev-only depth visualization
+│   ├── FeedbackManager.swift     # Coordinates haptic + audio + voice
+│   ├── HapticEngine.swift        # Core Haptics patterns per zone
+│   ├── SpatialAudioEngine.swift  # Spatial audio cues
+│   └── VoiceAnnouncer.swift      # Speech announcements
 ├── Models/
-│   ├── Obstacle.swift               # Obstacle data model
-│   ├── DistanceZone.swift           # Zone enum + thresholds
-│   └── FeedbackProfile.swift        # User feedback preferences
+│   ├── DistanceZone.swift        # Zone enum + thresholds
+│   ├── FeedbackProfile.swift     # Feedback configuration
+│   └── Obstacle.swift            # Obstacle data model
 ├── Resources/
-│   ├── StairDetector.mlmodel        # Core ML stair classifier
-│   ├── DepthAnythingV2.mlmodel      # Vision depth model (stretch goal)
-│   └── Audio/                       # Spatial audio assets
-└── Tests/
-    ├── DepthProcessorTests.swift
-    ├── ObstacleDetectorTests.swift
-    └── FeedbackManagerTests.swift
+│   └── MobileNetV2FP16.mlmodel   # Backup classification model
+├── UI/
+│   ├── MainView.swift            # Dual-mode main interface
+│   ├── OnboardingView.swift      # Voice-guided first launch + emergency contact
+│   ├── PermissionView.swift      # Voice-guided permission flow
+│   ├── SettingsView.swift        # Emergency contact manual setup
+│   └── DebugOverlayView.swift    # Dev-only depth visualization
+├── Secrets.plist                 # API keys (git-ignored)
+└── Info.plist
 ```
 
 ---
 
-## 8. Development Roadmap
+## 7. Interaction Model
 
-### Phase 1 — Core Detection (Weeks 1–3)
+| Gesture | Navigation Mode | Daily Mode |
+|---------|----------------|------------|
+| **Tap screen** | Pause / Resume scanning | Identify object |
+| **Long press (0.8s)** | Switch to Daily Mode | Switch to Navigation Mode |
 
-| Task | Description | Priority |
-|------|-------------|----------|
-| ARKit LiDAR session | Set up depth capture at 60fps | P0 |
-| Depth processing | Sample center region, compute min distance | P0 |
-| Ground filtering | Use ARKit plane anchors to ignore floor | P0 |
-| Zone classification | Map distance → 4 zones | P0 |
-| Haptic feedback | 4 distinct vibration patterns | P0 |
-| Basic UI | Start/stop button, VoiceOver labels | P0 |
-
-**Deliverable**: App detects obstacles ahead and vibrates with intensity proportional to distance.
-
-### Phase 2 — Spatial Feedback (Weeks 4–5)
-
-| Task | Description | Priority |
-|------|-------------|----------|
-| 3x3 grid sampling | Detect obstacle direction (left/center/right) | P0 |
-| Spatial audio | Pan audio cues based on obstacle position | P0 |
-| Stair detection | Train + integrate Core ML classifier | P0 |
-| Voice announcements | "Obstacle left", "Stairs ahead" | P1 |
-| Settings screen | Sensitivity, feedback mode, volume | P1 |
-
-**Deliverable**: App provides directional feedback and warns about stairs.
-
-### Phase 3 — Polish & Ship (Weeks 6–8)
-
-| Task | Description | Priority |
-|------|-------------|----------|
-| Onboarding flow | Accessible tutorial for first-time users | P0 |
-| Battery optimization | Adaptive frame rate (30fps walking, 15fps standing) | P0 |
-| Object recognition | Identify common obstacles (chair, pole, person) | P1 |
-| Volume button shortcuts | Physical button to toggle modes | P1 |
-| Beta testing | Test with visually impaired users | P0 |
-| App Store submission | Metadata, screenshots, accessibility review | P0 |
-| **Vision depth fallback** | Integrate Depth Anything v2 for non-LiDAR devices | **Stretch** |
-
-**Deliverable**: Production-ready app on the App Store. Vision fallback if time permits.
+Design principles:
+- **No buttons to find** — the entire screen is the touch target
+- **All state changes voice-announced** — user never needs to see the screen
+- **Two gestures only** — tap and long press, nothing else to learn
 
 ---
 
-## 9. Siri Shortcuts & Back Tap Integration
+## 8. Emergency Assistance
 
-### Overview
+### Flow
 
-Guider provides a **Siri Shortcut** that allows users to launch and control the app hands-free. Combined with iOS **Back Tap**, this gives visually impaired users a fully physical, zero-screen interaction model.
+```
+Phone drop detected (ARKit Y-position drops 40cm+ in 0.5s)
+  ↓
+Strong haptic burst
+  ↓
+Voice: "Are you okay? Say yes, or say help."
+  ↓
+Listen for 10 seconds (SFSpeechRecognizer)
+  ↓
+┌─── "yes" / "okay" / "fine" → Resume scanning
+├─── "help" / no response → Escalate:
+│      ↓
+│    Dial emergency contact (system call confirmation)
+│      ↓
+│    Loop every 10s: "Emergency. This person has fallen.
+│    Please tap the blue Call button on screen."
+│      (guides bystanders to help unconscious user)
+└─── Tap screen → Dismiss, resume scanning
+```
 
-### Siri Shortcut
+### Emergency Contact Setup (Onboarding)
 
-Using the iOS 17 App Intents framework, Guider exposes shortcuts such as:
-
-| Shortcut Phrase | Action |
-|----------------|--------|
-| "Hey Siri, open Guider" | Launch app and auto-start scanning |
-| "Hey Siri, start scanning" | Launch app or resume scanning |
-| "Hey Siri, stop Guider" | Pause scanning |
-
-Implementation requires an `AppIntent` struct and an `AppShortcutsProvider` — approximately 30–50 lines of code. Works with free Apple ID, no paid developer account needed.
-
-### Back Tap Integration
-
-iOS allows users to bind **double-tap or triple-tap on the back of the iPhone** to a Shortcut via:
-
-**Settings → Accessibility → Touch → Back Tap**
-
-Users can assign:
-- **Double Tap** → "Start Guider" (launch and scan)
-- **Triple Tap** → "Stop Guider" (pause scanning)
-
-#### Why Back Tap?
-
-| Approach | Problem |
-|----------|---------|
-| Volume buttons | Conflicts with actual volume adjustment |
-| Shake gesture | False triggers when phone is chest-mounted; violates no-motion-sensor constraint |
-| Voice commands | Battery drain from continuous mic listening; conflicts with VoiceOver; requires network for accurate recognition |
-| **Back Tap** | **No conflicts, no battery cost, no code needed — just a Siri Shortcut** |
-
-#### Advantages
-
-- **Zero extra battery cost** — Back Tap uses the accelerometer that's always on anyway
-- **No code changes needed** — iOS handles the tap detection; we only provide the Shortcut
-- **Physical and tactile** — user can feel the phone and tap without looking
-- **Works with phone on chest** — user can reach up and double-tap the back of the phone
-- **Demo-friendly** — impressive to show in a hackathon presentation
-
-#### User Setup (guided in onboarding)
-
-1. Open iPhone **Settings → Accessibility → Touch → Back Tap**
-2. Select **Double Tap** → choose **"Start Guider"** shortcut
-3. Select **Triple Tap** → choose **"Stop Guider"** shortcut
-4. Done — user can now physically control Guider without touching the screen
-
-### Interaction Model Summary
-
-| Action | Method |
-|--------|--------|
-| **Launch app** | "Hey Siri, open Guider" or Back Tap |
-| **Pause/Resume** | Tap screen anywhere, or Back Tap shortcut |
-| **Open Settings** | Long press screen (1 second) |
-| **Emergency dismiss** | Tap screen |
-| **All state changes** | Voice-announced automatically |
-
-This design ensures the app is fully operable without vision, combining Siri voice, Back Tap physical gestures, and simple screen touch.
+1. Voice prompt: "Say the name of your emergency contact."
+2. User says a name → app searches Contacts via `CNContactStore`
+3. Voice confirms: "I found Mom, phone number 0412345678. Say yes to confirm."
+4. Long press to skip
 
 ---
 
-## 10. Key Technical Challenges
+## 9. Key Technical Challenges
 
 | Challenge | Impact | Mitigation |
 |-----------|--------|------------|
 | **Ground false positives** | High — constant false alerts | ARKit plane detection filters floor; height threshold (ignore below 30cm) |
-| **Chest mount instability** | High — noisy depth readings | Temporal smoothing (rolling average over 5 frames) |
-| **Battery drain** | High — LiDAR + haptics is power-hungry | Adaptive frame rate; process only center 60% of depth map |
-| **Stair detection accuracy** | Medium — critical safety feature | Dedicated Core ML model; supplement with depth gradient analysis |
-| **Outdoor sunlight interference** | Medium — LiDAR degrades in direct sunlight | Fuse LiDAR depth with camera-based depth hints from ARKit |
-| **Feedback latency** | High — delay = danger | Target <50ms end-to-end; pre-load haptic patterns; avoid main thread blocking |
+| **Battery drain** | High — LiDAR + haptics is power-hungry | Adaptive frame rate (30fps walking, 15fps stationary) |
+| **Stair detection accuracy** | Medium — critical safety feature | Depth gradient analysis + temporal filtering (3 consecutive frames) |
+| **Feedback latency** | High — delay = danger | Target <50ms; pre-load haptic patterns; avoid main thread blocking |
+| **Haptic engine invalidation** | Medium — stops after background | Auto-restart on foreground; nil-check before play |
+| **Unconscious user emergency** | High — can't tap call button | Bystander guidance loop every 10s via voice |
+| **Offline object recognition** | Medium — no internet available | Apple Vision on-device fallback; auto-switch via NWPathMonitor |
 
 ---
 
-## 11. Competitor Landscape
-
-| App | Approach | Key Limitation | Our Advantage |
-|-----|----------|---------------|---------------|
-| Super Lidar | LiDAR audio mapping | No haptic feedback | Multi-modal feedback (haptic + spatial audio + voice) |
-| Obstacle Detector | LiDAR + basic vibration | Single vibration level | 4-zone graduated haptic response |
-| EyeGuide | LiDAR + voice prompts | No directional cues | Spatial audio panning (left/center/right) |
-| Be My Eyes | Human volunteers | Not real-time | Autonomous real-time detection |
-| 轻松无障碍 | Camera, 10s intervals | Not real-time | 60fps continuous scanning |
-
----
-
-## 12. Target Users
+## 10. Target Users
 
 - **Primary**: Visually impaired iPhone Pro users
 - **Secondary**: Elderly users with declining vision
@@ -300,7 +204,7 @@ This design ensures the app is fully operable without vision, combining Siri voi
 
 ---
 
-## 13. Success Metrics
+## 11. Success Metrics
 
 | Metric | Target |
 |--------|--------|
@@ -308,17 +212,6 @@ This design ensures the app is fully operable without vision, combining Siri voi
 | False positive rate | < 5% after ground filtering |
 | Stair detection recall | > 90% |
 | Battery life during continuous use | > 2 hours |
-| App Store accessibility rating | Full VoiceOver compliance |
-| Beta tester satisfaction | > 80% "would use daily" |
-
----
-
-## 14. Summary
-
-| Dimension | Assessment |
-|-----------|------------|
-| **Technical Feasibility** | High — ARKit LiDAR APIs are mature, well-documented, 60fps capable |
-| **Implementation Difficulty** | Medium — MVP in 3 weeks; main challenge is tuning feedback UX |
-| **User Value** | High — zero additional hardware cost, solves real daily safety needs |
-| **Market Opportunity** | Strong — Chinese market has no mature LiDAR obstacle detection app |
-| **Biggest Risk** | Social acceptance of wearing phone on chest; LiDAR-only limits to Pro devices (vision fallback mitigates if time permits) |
+| Object recognition (online) | Natural language descriptions |
+| Object recognition (offline) | Top-3 category labels |
+| Emergency response time | < 15 seconds from drop to call |

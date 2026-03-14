@@ -7,11 +7,16 @@ struct PermissionView: View {
     @State private var hasSpoken = false
 
     private var isNotDetermined: Bool {
-        lidarManager.cameraPermission == .notDetermined || lidarManager.micPermission == .notDetermined
+        lidarManager.cameraPermission == .notDetermined ||
+        lidarManager.micPermission == .notDetermined ||
+        lidarManager.speechPermission == .notDetermined
     }
 
     private var isDenied: Bool {
-        lidarManager.cameraPermission == .denied || lidarManager.micPermission == .denied
+        lidarManager.cameraPermission == .denied ||
+        lidarManager.micPermission == .denied ||
+        lidarManager.speechPermission == .denied ||
+        lidarManager.speechPermission == .restricted
     }
 
     var body: some View {
@@ -119,7 +124,7 @@ struct PermissionView: View {
                     .cornerRadius(16)
             }
             .accessibilityLabel("Allow permissions")
-            .accessibilityHint("Requests camera and microphone access for obstacle detection and emergency assistance")
+            .accessibilityHint("Requests camera, microphone, and speech recognition access for obstacle detection and voice assistance")
             .padding(.horizontal, 32)
 
             // Secondary action — outlined, still large
@@ -166,7 +171,7 @@ struct PermissionView: View {
                     .cornerRadius(16)
             }
             .accessibilityLabel("Open Settings")
-            .accessibilityHint("Opens iPhone Settings so you can grant camera and microphone access to Guider")
+            .accessibilityHint("Opens iPhone Settings so you can grant camera, microphone, and speech recognition access to Guider")
             .padding(.horizontal, 32)
         }
     }
@@ -175,9 +180,9 @@ struct PermissionView: View {
 
     private var statusMessage: String {
         if isNotDetermined {
-            return "This app needs camera access for obstacle detection and microphone access for emergency assistance."
+            return "This app needs camera, microphone, and speech recognition access for obstacle detection and voice assistance."
         } else {
-            return "Guider needs camera and microphone access to work. Please grant access in Settings."
+            return "Guider needs camera, microphone, and speech recognition access to work. Please grant access in Settings."
         }
     }
 
@@ -186,9 +191,9 @@ struct PermissionView: View {
 
         let message: String
         if isNotDetermined {
-            message = "Welcome to Guider. This app needs camera access for obstacle detection and microphone access for emergency assistance. Use the Allow Permissions button to grant access, or Skip for Now to continue without permissions."
+            message = "Welcome to Guider. This app needs camera, microphone, and speech recognition access for obstacle detection and voice assistance. Use the Allow Permissions button to grant access, or Skip for Now to continue without permissions."
         } else {
-            message = "Guider needs camera and microphone access to work. Use the Open Settings button to grant access."
+            message = "Guider needs camera, microphone, and speech recognition access to work. Use the Open Settings button to grant access."
         }
 
         let utterance = AVSpeechUtterance(string: message)

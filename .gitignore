@@ -22,6 +22,9 @@ Package.resolved
 # CocoaPods
 Pods/
 
+# Secrets
+Guider/Secrets.plist
+
 # macOS
 .DS_Store
 *.swp

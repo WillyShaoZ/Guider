@@ -1,7 +1,7 @@
 import AVFoundation
-import Vision
-import CoreML
 import UIKit
+import Vision
+import Network
 
 final class ObjectRecognizer: ObservableObject {
     enum State: Equatable {
@@ -17,13 +17,25 @@ final class ObjectRecognizer: ObservableObject {
     private var captureSession: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
     private var delegate: PhotoDelegate?
-    private var vnModel: VNCoreMLModel?
+    private let geminiService = GeminiVisionService()
+
+    // Network monitoring
+    private let networkMonitor = NWPathMonitor()
+    private var isOnline = true
 
     init() {
-        loadModel()
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isOnline = path.status == .satisfied
+            }
+        }
+        networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
     }
 
-    /// Take a photo and recognize the object in it
+    deinit {
+        networkMonitor.cancel()
+    }
+
     func recognize() {
         guard state == .idle || isFinished else { return }
         state = .capturing
@@ -39,20 +51,6 @@ final class ObjectRecognizer: ObservableObject {
         switch state {
         case .result, .error: return true
         default: return false
-        }
-    }
-
-    // MARK: - Model Loading
-
-    private func loadModel() {
-        do {
-            let config = MLModelConfiguration()
-            config.computeUnits = .cpuAndNeuralEngine
-            let model = try MobileNetV2FP16(configuration: config)
-            vnModel = try VNCoreMLModel(for: model.model)
-            print("[ObjectRecognizer] MobileNetV2 loaded")
-        } catch {
-            print("[ObjectRecognizer] Failed to load model: \(error)")
         }
     }
 
@@ -82,7 +80,6 @@ final class ObjectRecognizer: ObservableObject {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             session.startRunning()
-            // Wait for auto-focus and auto-exposure
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 self?.takePhoto()
             }
@@ -98,13 +95,14 @@ final class ObjectRecognizer: ObservableObject {
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
 
-        let delegate = PhotoDelegate { [weak self] image in
-            if let image {
-                self?.classifyImage(image)
+        let delegate = PhotoDelegate { [weak self] imageData in
+            guard let self else { return }
+            if let imageData {
+                self.processImage(imageData)
             } else {
                 DispatchQueue.main.async {
-                    self?.state = .error("Failed to capture photo")
-                    self?.tearDownCamera()
+                    self.state = .error("Failed to capture photo")
+                    self.tearDownCamera()
                 }
             }
         }
@@ -121,90 +119,118 @@ final class ObjectRecognizer: ObservableObject {
         }
     }
 
-    // MARK: - MobileNetV2 Classification
+    // MARK: - Route to online or offline
 
-    private func classifyImage(_ image: CGImage) {
+    private func processImage(_ imageData: Data) {
         DispatchQueue.main.async { self.state = .recognizing }
 
-        guard let vnModel else {
+        if isOnline {
+            describeWithGemini(imageData)
+        } else {
+            describeOffline(imageData)
+        }
+    }
+
+    // MARK: - Online: Gemini API
+
+    private func describeWithGemini(_ imageData: Data) {
+        Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let description = try await geminiService.describeImage(
+                    jpegData: imageData,
+                    prompt: "The user is visually impaired. Describe what is in front of them in one or two short sentences. Be direct and helpful."
+                )
+
+                await MainActor.run {
+                    self.state = .result(description)
+                    self.tearDownCamera()
+                }
+            } catch {
+                // If Gemini fails, fall back to offline
+                await MainActor.run {
+                    self.describeOffline(imageData)
+                }
+            }
+        }
+    }
+
+    // MARK: - Offline: Apple Vision
+
+    private func describeOffline(_ imageData: Data) {
+        guard let cgImage = UIImage(data: imageData)?.cgImage else {
             DispatchQueue.main.async {
-                self.state = .error("Model not loaded")
+                self.state = .error("Could not process image")
                 self.tearDownCamera()
             }
             return
         }
 
-        let request = VNCoreMLRequest(model: vnModel) { [weak self] request, error in
+        let classifyRequest = VNClassifyImageRequest { [weak self] request, error in
             guard let self else { return }
 
-            if let error {
+            if error != nil {
                 DispatchQueue.main.async {
-                    self.state = .error("Recognition failed")
+                    self.state = .error("Offline recognition failed.")
                     self.tearDownCamera()
                 }
-                print("[ObjectRecognizer] Error: \(error)")
                 return
             }
 
             guard let results = request.results as? [VNClassificationObservation] else {
                 DispatchQueue.main.async {
-                    self.state = .error("No results")
+                    self.state = .error("No results from offline recognition.")
                     self.tearDownCamera()
                 }
                 return
             }
 
-            // Top result with readable name
+            // Take top results with confidence > 20%
             let topResults = results
+                .filter { $0.confidence > 0.2 }
                 .prefix(3)
-                .filter { $0.confidence > 0.05 }
-                .map { observation -> String in
-                    let name = observation.identifier
-                        .components(separatedBy: ",")
-                        .first?
-                        .trimmingCharacters(in: .whitespaces) ?? observation.identifier
-                    let confidence = Int(observation.confidence * 100)
-                    return "\(name) \(confidence)%"
-                }
+                .map { $0.identifier.replacingOccurrences(of: "_", with: " ") }
 
             let description: String
             if topResults.isEmpty {
-                description = "Cannot identify this object"
+                description = "I couldn't identify anything clearly. Try moving closer or pointing the camera at an object."
+            } else if topResults.count == 1 {
+                description = "I see \(topResults[0])."
             } else {
-                description = topResults.joined(separator: ", ")
+                let items = topResults.joined(separator: ", ")
+                description = "I see \(items)."
             }
 
             DispatchQueue.main.async {
-                self.state = .result(description)
+                self.state = .result("(Offline) \(description)")
                 self.tearDownCamera()
             }
         }
-        request.imageCropAndScaleOption = .centerCrop
 
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         DispatchQueue.global(qos: .userInitiated).async {
-            try? handler.perform([request])
+            try? handler.perform([classifyRequest])
         }
     }
 }
 
-// MARK: - Photo Capture Delegate
+// Need to inherit from NSObject for NWPathMonitor usage in init
+extension ObjectRecognizer: @unchecked Sendable {}
 
-private class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    let completion: (CGImage?) -> Void
+private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    let completion: (Data?) -> Void
 
-    init(completion: @escaping (CGImage?) -> Void) {
+    init(completion: @escaping (Data?) -> Void) {
         self.completion = completion
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         guard error == nil,
-              let data = photo.fileDataRepresentation(),
-              let uiImage = UIImage(data: data),
-              let cgImage = uiImage.cgImage else {
+              let data = photo.fileDataRepresentation() else {
             completion(nil)
             return
         }
-        completion(cgImage)
+        completion(data)
     }
 }

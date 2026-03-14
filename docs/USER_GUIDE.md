@@ -4,7 +4,7 @@
 
 Guider is an iOS app that helps visually impaired users navigate safely. Wear your iPhone on your chest with a lanyard — the app uses LiDAR to detect obstacles ahead and alerts you through vibration and voice.
 
-Guider also has a Daily Mode that identifies objects using the camera.
+Guider also has a Daily Mode that identifies objects using AI.
 
 ---
 
@@ -19,8 +19,10 @@ Guider also has a Daily Mode that identifies objects using the camera.
 ### First Launch
 
 1. Open Guider
-2. The app will ask for **camera** and **microphone** permissions — tap **Allow** for both
-3. Scanning starts automatically — you'll hear: *"Guider is scanning. Tap to pause."*
+2. The app will ask for **camera**, **microphone**, and **speech recognition** permissions — allow all
+3. Walk through the **onboarding guide** — each step is voice-announced, tap to continue
+4. Set up your **emergency contact** by voice — say a name from your contacts, the app will find and confirm it (long press to skip)
+5. Scanning starts automatically — you'll hear: *"Guider is scanning. Tap to pause."*
 
 ---
 
@@ -39,72 +41,68 @@ The phone scans ahead using LiDAR and vibrates when obstacles are detected.
 
 When an obstacle enters the Danger zone, you'll hear a voice announcement: *"Obstacle left"* or *"Obstacle right"*.
 
+**Stair Detection**: The app also detects stairs ahead and alerts you with a distinct double-tap vibration pattern.
+
 ### Daily Mode
 
-Point the phone at an object and tap the screen. The app takes a photo, identifies the object, and speaks the result.
+Point the phone at an object and **tap the screen**. The app takes a photo, identifies what's in front of you, and speaks the result.
 
-Examples: *"water bottle 92%"*, *"coffee mug 85%"*, *"remote control 78%"*
+- **With internet**: Uses Gemini AI for detailed descriptions — e.g. *"A red coffee mug on a wooden desk next to a laptop."*
+- **Without internet**: Uses Apple's built-in Vision framework — e.g. *"(Offline) I see coffee mug, desk."*
 
-The camera only turns on when you tap — it's off the rest of the time to save battery.
+The app automatically detects your network status and switches between online and offline mode. No setup needed.
 
 ---
 
 ## Controls
 
-### Screen Touch
+| Gesture | Navigation Mode | Daily Mode |
+|---------|----------------|------------|
+| **Tap screen** | Pause / Resume scanning | Identify object |
+| **Long press (0.8s)** | Switch to Daily Mode | Switch to Navigation Mode |
 
-| Action | Navigation Mode | Daily Mode |
-|--------|----------------|------------|
-| **Tap screen** | Pause / Resume scanning | Take photo & identify object |
-
-### Back Tap (Recommended)
-
-You can control Guider by tapping the back of your iPhone — no need to look at or touch the screen.
-
-| Gesture | Action |
-|---------|--------|
-| **Double tap back** | Same as tapping the screen (pause/resume or identify) |
-| **Triple tap back** | Switch between Navigation and Daily mode |
-
-#### How to Set Up Back Tap
-
-1. On your iPhone, open **Settings**
-2. Go to **Accessibility → Touch → Back Tap**
-3. Set **Double Tap** → select shortcut **"Guider Pause"**
-4. Set **Triple Tap** → select shortcut **"Switch Guider Mode"**
-
-To create these shortcuts:
-1. Open the **Shortcuts** app on your iPhone
-2. Tap **+** to create a new shortcut
-3. Add action **"Open URLs"**
-4. For pause: enter `guider://pause`, name it **"Guider Pause"**
-5. For mode switch: enter `guider://switch`, name it **"Switch Guider Mode"**
-
-### Siri
-
-You can also say:
-- *"Hey Siri, open Guider"* — launch the app
+That's it — just **tap** and **long press**. No buttons to find.
 
 ---
 
 ## Drop Detection & Emergency
 
-If the phone detects a fall (e.g. you drop it), it will:
+If the phone detects a fall (e.g. you drop it or fall), it will:
 
-1. Vibrate strongly
-2. Ask: *"It seems like your phone dropped. Are you okay? Say yes, or say help."*
-3. Listen for 10 seconds
-4. If you say **"yes"** or **"okay"** → resumes scanning
-5. If you say **"help"** or don't respond → calls your emergency contact
+1. **Vibrate strongly** to alert you
+2. Ask: *"Are you okay? Say yes, or say help."*
+3. **Listen for 10 seconds**
+4. If you say **"yes"**, **"okay"**, or **"fine"** → resumes scanning
+5. If you say **"help"** or **don't respond**:
+   - Auto-dials your emergency contact
+   - **Repeats every 10 seconds**: *"Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call [contact name] for help."*
+   - This bystander guidance continues until someone nearby taps the call button or you tap to dismiss
+6. If **no emergency contact** is set → plays loud alert: *"This person has fallen. If someone is nearby, please help."*
 
 ### Setting Up Emergency Contact
 
-Emergency contact is set during first launch or through the settings (long press screen in Navigation mode):
+**During first launch (recommended):**
+1. The onboarding guide will ask: *"Say the name of your emergency contact."*
+2. Say a name (e.g. "Mom", "John") — the app searches your contacts
+3. It confirms: *"I found Mom, phone number 0412345678. Say yes to confirm."*
+4. Say **"yes"** to save, or tap to try a different name
+5. Long press to skip
 
-- **Contact Name**: e.g. "Mom", "Partner"
-- **Phone Number**: e.g. "+61 400 123 456"
+**Later:**
+You can also set it manually in the Settings view — accessible through the app.
 
-If no emergency contact is set, Guider will play a loud voice alert: *"This person may need help"* for nearby people to hear.
+---
+
+## Online vs Offline Mode
+
+| Feature | Online (Gemini AI) | Offline (Apple Vision) |
+|---------|-------------------|----------------------|
+| Object recognition | Detailed natural language descriptions | Category labels (1000+ categories) |
+| Internet required | Yes | No |
+| Speed | 2-3 seconds | < 1 second |
+| Example output | "A golden retriever lying on a grey couch" | "I see golden retriever, couch" |
+
+The app switches automatically — you don't need to do anything. If Gemini fails (e.g. network drops mid-request), it automatically falls back to offline mode.
 
 ---
 
@@ -113,7 +111,7 @@ If no emergency contact is set, Guider will play a loud voice alert: *"This pers
 ### Navigation Mode
 
 - **Mount the phone on your chest** pointing forward — this gives the best scanning angle
-- **Walk at normal pace** — the app updates 60 times per second
+- **Walk at normal pace** — the app adjusts scanning speed automatically (faster when walking, slower when stationary)
 - **Outdoors in direct sunlight**: LiDAR range may be reduced. Stay alert.
 - **Battery**: continuous scanning uses about 30-40% per hour. Charge before going out.
 
@@ -121,8 +119,8 @@ If no emergency contact is set, Guider will play a loud voice alert: *"This pers
 
 - **Hold the object 20-50 cm from the camera** for best results
 - **Good lighting helps** — the flash will turn on automatically if needed
-- **Wait for the beep** before moving the object — identification takes about 1 second
-- The app recognizes 1000+ common objects including food, electronics, furniture, animals, and household items
+- **Wait for the voice result** before tapping again — identification takes 1-3 seconds
+- **Online mode** gives much better results — make sure you have internet for detailed descriptions
 
 ---
 
@@ -131,10 +129,12 @@ If no emergency contact is set, Guider will play a loud voice alert: *"This pers
 Guider is designed for visually impaired users:
 
 - **All state changes are voice-announced** — you never need to see the screen
+- **Voice-guided onboarding** — the app talks you through setup on first launch
+- **Voice-guided emergency contact setup** — say a name, the app finds the contact
 - **Full VoiceOver support** on all screens
 - **High contrast UI** for low-vision users
 - **Large touch targets** — the entire screen is the button
-- **No complex gestures** — just tap and hold
+- **No complex gestures** — just tap and long press
 
 ---
 
@@ -142,19 +142,22 @@ Guider is designed for visually impaired users:
 
 | Problem | Solution |
 |---------|----------|
-| No vibration | Check iPhone silent mode switch is off |
+| No vibration | Check iPhone silent mode switch is off. Try leaving and re-entering the app |
 | No voice announcements | Turn up iPhone volume |
 | "LiDAR not available" | You need an iPhone Pro (12 Pro or later) |
 | App won't start scanning | Check camera permission in Settings → Guider |
-| Object recognition is wrong | Try better lighting, hold object closer, try again |
-| Back Tap not working | Make sure you set it up in Settings → Accessibility → Touch → Back Tap |
-| Drop detection triggers too often | This can happen during vigorous movement — you can dismiss by tapping the screen |
+| Object recognition says "API key missing" | Create `Guider/Secrets.plist` with your Gemini API key (see README) |
+| Object recognition gives basic labels only | You're in offline mode — connect to internet for detailed AI descriptions |
+| Drop detection triggers too often | This can happen during vigorous movement — tap the screen to dismiss |
+| Vibration stops after switching apps | Leave and re-enter the app — the haptic engine restarts automatically |
+| Emergency call shows confirmation dialog | This is an iOS security requirement — nearby people can tap the Call button for you |
 
 ---
 
 ## Privacy
 
-- **All processing is done on your iPhone** — no data is sent to any server
-- **No internet required** — Guider works fully offline
-- **No data collection** — no analytics, no tracking
+- **Navigation mode** is fully on-device — no data sent anywhere
+- **Daily mode (online)** sends a photo to Google's Gemini API for recognition — the image is not stored
+- **Daily mode (offline)** is fully on-device — no data sent anywhere
+- **No analytics, no tracking, no data collection**
 - Camera is only active during scanning (Navigation) or when you tap to identify (Daily)
