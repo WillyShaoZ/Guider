@@ -15,27 +15,21 @@ struct GuiderApp: App {
             if !lidarManager.allPermissionsGranted {
                 PermissionView()
                     .environmentObject(lidarManager)
-                    .onOpenURL { url in
-                        handleURL(url)
+            } else if !appState.hasCompletedOnboarding {
+                OnboardingView()
+                    .environmentObject(appState)
+                    .onReceive(NotificationCenter.default.publisher(for: .emergencyContactConfirmed)) { notification in
+                        if let name = notification.userInfo?["name"] as? String,
+                           let number = notification.userInfo?["number"] as? String {
+                            appState.emergencyContactName = name
+                            appState.emergencyContact = number
+                        }
                     }
             } else {
                 MainView()
                     .environmentObject(appState)
                     .environmentObject(lidarManager)
             }
-        }
-    }
-
-    private func handleURL(_ url: URL) {
-        guard url.scheme == "guider" else { return }
-
-        switch url.host {
-        case "switch":
-            NotificationCenter.default.post(name: .guiderSwitchMode, object: nil)
-        case "pause":
-            NotificationCenter.default.post(name: .guiderPause, object: nil)
-        default:
-            break
         }
     }
 

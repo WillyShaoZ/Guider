@@ -1,11 +1,11 @@
 import AVFoundation
 import UIKit
-import Speech
+import Vision
+import Network
 
 final class ObjectRecognizer: ObservableObject {
     enum State: Equatable {
         case idle
-        case listening
         case capturing
         case recognizing
         case result(String)
@@ -19,34 +19,21 @@ final class ObjectRecognizer: ObservableObject {
     private var delegate: PhotoDelegate?
     private let geminiService = GeminiVisionService()
 
-    private var audioEngine: AVAudioEngine?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    private var listenTimer: Timer?
+    // Network monitoring
+    private let networkMonitor = NWPathMonitor()
+    private var isOnline = true
 
-    private let listenTimeout: TimeInterval = 6.0
-    private let supportedQueries = [
-        "what am i looking at",
-        "what am i seeing",
-        "what do you see",
-        "what is this",
-        "what's this",
-        "describe this",
-        "describe what you see",
-        "look at this"
-    ]
-
-    func startVoiceAssistant() {
-        guard state == .idle || isFinished else { return }
-
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
-            state = .error("Speech recognition is not available. Please enable it in Settings.")
-            return
+    init() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isOnline = path.status == .satisfied
+            }
         }
+        networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
+    }
 
-        state = .listening
-        startListeningForPrompt()
+    deinit {
+        networkMonitor.cancel()
     }
 
     func recognize() {
@@ -56,7 +43,6 @@ final class ObjectRecognizer: ObservableObject {
     }
 
     func reset() {
-        stopListening()
         tearDownCamera()
         state = .idle
     }
@@ -66,94 +52,6 @@ final class ObjectRecognizer: ObservableObject {
         case .result, .error: return true
         default: return false
         }
-    }
-
-    // MARK: - Speech Input
-
-    private func startListeningForPrompt() {
-        guard let speechRecognizer, speechRecognizer.isAvailable else {
-            state = .error("Speech recognition is currently unavailable.")
-            return
-        }
-
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers])
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-
-            let audioEngine = AVAudioEngine()
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-
-            let inputNode = audioEngine.inputNode
-            let recordingFormat = inputNode.outputFormat(forBus: 0)
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-                self?.recognitionRequest?.append(buffer)
-            }
-
-            self.audioEngine = audioEngine
-            self.recognitionRequest = request
-
-            audioEngine.prepare()
-            try audioEngine.start()
-
-            recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-                guard let self else { return }
-
-                if let text = result?.bestTranscription.formattedString.lowercased(),
-                   self.matchesSceneQuery(text) {
-                    self.stopListening()
-                    DispatchQueue.main.async {
-                        self.recognize()
-                    }
-                    return
-                }
-
-                if error != nil || result?.isFinal == true {
-                    DispatchQueue.main.async {
-                        self.stopListening()
-                        self.state = .error("Ask: what am I looking at?")
-                    }
-                }
-            }
-
-            listenTimer = Timer.scheduledTimer(withTimeInterval: listenTimeout, repeats: false) { [weak self] _ in
-                guard let self, self.state == .listening else { return }
-                self.stopListening()
-                self.state = .error("I didn't hear a question. Ask: what am I looking at?")
-            }
-        } catch {
-            stopListening()
-            state = .error("Could not start listening.")
-        }
-    }
-
-    private func stopListening() {
-        listenTimer?.invalidate()
-        listenTimer = nil
-
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
-
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-
-        recognitionTask?.cancel()
-        recognitionTask = nil
-
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
-    }
-
-    private func matchesSceneQuery(_ text: String) -> Bool {
-        if supportedQueries.contains(where: { text.contains($0) }) {
-            return true
-        }
-
-        let mentionsQuestion = text.contains("what") || text.contains("describe")
-        let mentionsVision = text.contains("looking") || text.contains("see") || text.contains("this")
-        return mentionsQuestion && mentionsVision
     }
 
     // MARK: - Camera
@@ -198,12 +96,13 @@ final class ObjectRecognizer: ObservableObject {
         settings.flashMode = .auto
 
         let delegate = PhotoDelegate { [weak self] imageData in
+            guard let self else { return }
             if let imageData {
-                self?.describeImageWithGemini(imageData)
+                self.processImage(imageData)
             } else {
                 DispatchQueue.main.async {
-                    self?.state = .error("Failed to capture photo")
-                    self?.tearDownCamera()
+                    self.state = .error("Failed to capture photo")
+                    self.tearDownCamera()
                 }
             }
         }
@@ -220,18 +119,28 @@ final class ObjectRecognizer: ObservableObject {
         }
     }
 
-    // MARK: - Image Understanding
+    // MARK: - Route to online or offline
 
-    private func describeImageWithGemini(_ imageData: Data) {
+    private func processImage(_ imageData: Data) {
         DispatchQueue.main.async { self.state = .recognizing }
 
+        if isOnline {
+            describeWithGemini(imageData)
+        } else {
+            describeOffline(imageData)
+        }
+    }
+
+    // MARK: - Online: Gemini API
+
+    private func describeWithGemini(_ imageData: Data) {
         Task { [weak self] in
             guard let self else { return }
 
             do {
                 let description = try await geminiService.describeImage(
                     jpegData: imageData,
-                    prompt: "The user is visually impaired and asks what they are looking at. Give a short, direct description of the main object or scene in one or two sentences."
+                    prompt: "The user is visually impaired. Describe what is in front of them in one or two short sentences. Be direct and helpful."
                 )
 
                 await MainActor.run {
@@ -239,14 +148,75 @@ final class ObjectRecognizer: ObservableObject {
                     self.tearDownCamera()
                 }
             } catch {
+                // If Gemini fails, fall back to offline
                 await MainActor.run {
-                    self.state = .error(error.localizedDescription.isEmpty ? "Gemini request failed." : error.localizedDescription)
-                    self.tearDownCamera()
+                    self.describeOffline(imageData)
                 }
             }
         }
     }
+
+    // MARK: - Offline: Apple Vision
+
+    private func describeOffline(_ imageData: Data) {
+        guard let cgImage = UIImage(data: imageData)?.cgImage else {
+            DispatchQueue.main.async {
+                self.state = .error("Could not process image")
+                self.tearDownCamera()
+            }
+            return
+        }
+
+        let classifyRequest = VNClassifyImageRequest { [weak self] request, error in
+            guard let self else { return }
+
+            if error != nil {
+                DispatchQueue.main.async {
+                    self.state = .error("Offline recognition failed.")
+                    self.tearDownCamera()
+                }
+                return
+            }
+
+            guard let results = request.results as? [VNClassificationObservation] else {
+                DispatchQueue.main.async {
+                    self.state = .error("No results from offline recognition.")
+                    self.tearDownCamera()
+                }
+                return
+            }
+
+            // Take top results with confidence > 20%
+            let topResults = results
+                .filter { $0.confidence > 0.2 }
+                .prefix(3)
+                .map { $0.identifier.replacingOccurrences(of: "_", with: " ") }
+
+            let description: String
+            if topResults.isEmpty {
+                description = "I couldn't identify anything clearly. Try moving closer or pointing the camera at an object."
+            } else if topResults.count == 1 {
+                description = "I see \(topResults[0])."
+            } else {
+                let items = topResults.joined(separator: ", ")
+                description = "I see \(items)."
+            }
+
+            DispatchQueue.main.async {
+                self.state = .result("(Offline) \(description)")
+                self.tearDownCamera()
+            }
+        }
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? handler.perform([classifyRequest])
+        }
+    }
 }
+
+// Need to inherit from NSObject for NWPathMonitor usage in init
+extension ObjectRecognizer: @unchecked Sendable {}
 
 private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     let completion: (Data?) -> Void

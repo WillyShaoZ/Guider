@@ -1,16 +1,25 @@
 import Foundation
 
 struct GeminiVisionService {
-    private let apiKey = "PASTE_GEMINI_API_KEY_HERE"
+    private let apiKey: String
     private let model = "gemini-2.5-flash"
     private let session: URLSession
 
     init(session: URLSession = .shared) {
         self.session = session
+
+        // Load API key from Secrets.plist
+        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path),
+           let key = dict["GEMINI_API_KEY"] as? String {
+            self.apiKey = key
+        } else {
+            self.apiKey = ""
+        }
     }
 
     func describeImage(jpegData: Data, prompt: String) async throws -> String {
-        guard apiKey != "PASTE_GEMINI_API_KEY_HERE", !apiKey.isEmpty else {
+        guard !apiKey.isEmpty else {
             throw GeminiVisionError.missingAPIKey
         }
 

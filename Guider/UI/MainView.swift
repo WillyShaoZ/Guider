@@ -35,6 +35,15 @@ struct MainView: View {
         .onDisappear {
             shutdown()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            feedbackManager.prepare()
+            if appState.isScanning {
+                lidarManager.start()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            feedbackManager.stop()
+        }
         .onReceive(detector.detectionSubject.receive(on: DispatchQueue.main)) { result in
             guard appState.currentMode == .navigation else { return }
             appState.detectionResult = result
@@ -75,12 +84,6 @@ struct MainView: View {
             } else if case .error(let msg) = newState {
                 speak(msg)
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .guiderSwitchMode)) { _ in
-            switchMode()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .guiderPause)) { _ in
-            handleTap()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
@@ -178,7 +181,7 @@ struct MainView: View {
 
                 Spacer()
 
-                Text("Tap, then ask what am I looking at")
+                Text("Tap to identify what's in front of you")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.secondary)
 
@@ -236,7 +239,7 @@ struct MainView: View {
             toggleScanning()
         } else {
             // Daily mode — trigger object recognition
-            triggerVoiceAssistant()
+            triggerObjectRecognition()
         }
     }
 
@@ -251,7 +254,7 @@ struct MainView: View {
             stopScanning()
             objectRecognizer.reset()
             appState.currentMode = .daily
-            speak("Daily mode. Tap and ask what am I looking at.")
+            speak("Daily mode. Tap to identify objects.")
         } else {
             // Switch to navigation mode
             objectRecognizer.reset()
@@ -263,10 +266,13 @@ struct MainView: View {
 
     // MARK: - Object Recognition
 
-    private func triggerVoiceAssistant() {
+    private func triggerObjectRecognition() {
         if objectRecognizer.isFinished || objectRecognizer.state == .idle {
             objectRecognizer.reset()
-            objectRecognizer.startVoiceAssistant()
+            speak("Identifying...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                objectRecognizer.recognize()
+            }
         }
     }
 
@@ -367,7 +373,6 @@ struct MainView: View {
     private var dailyModeIcon: String {
         switch objectRecognizer.state {
         case .idle: return "camera.fill"
-        case .listening: return "waveform.circle.fill"
         case .capturing: return "camera.shutter.button"
         case .recognizing: return "sparkle.magnifyingglass"
         case .result: return "checkmark.circle.fill"
@@ -378,7 +383,6 @@ struct MainView: View {
     private var dailyModeColor: Color {
         switch objectRecognizer.state {
         case .idle: return .blue
-        case .listening: return .purple
         case .capturing, .recognizing: return .orange
         case .result: return .green
         case .error: return .red
@@ -387,8 +391,7 @@ struct MainView: View {
 
     private var dailyModeStatusText: String {
         switch objectRecognizer.state {
-        case .idle: return "Ready to Listen"
-        case .listening: return "Listening..."
+        case .idle: return "Ready to Identify"
         case .capturing: return "Capturing..."
         case .recognizing: return "Recognizing..."
         case .result: return "Identified"
@@ -446,7 +449,7 @@ struct MainView: View {
             return "Tap to dismiss the emergency alert. Long press to switch modes."
         }
         if appState.currentMode == .daily {
-            return "Tap to ask what you are looking at. Long press to switch modes."
+            return "Tap to identify what's in front of you. Long press to switch modes."
         }
         return "Tap to pause or resume scanning. Long press to switch modes."
     }

@@ -2,6 +2,7 @@ import AVFoundation
 import Speech
 import Combine
 import UIKit
+import CallKit
 
 /// Handles the emergency flow after a phone drop is detected.
 ///
@@ -35,6 +36,7 @@ final class EmergencyAssistant: ObservableObject {
 
     private var listenTimer: Timer?
     private let listenTimeout: TimeInterval = 10.0
+    private var bystanderTimer: Timer?
 
     private let positiveKeywords = ["yes", "yeah", "okay", "ok", "fine", "good", "i'm okay", "i'm fine", "i'm good", "all good"]
     private let helpKeywords = ["help", "no", "emergency", "call", "fall", "fell", "hurt"]
@@ -64,6 +66,7 @@ final class EmergencyAssistant: ObservableObject {
     func dismiss() {
         // User tapped to dismiss — they're okay
         stopListening()
+        stopBystanderGuidance()
         synthesizer.stopSpeaking(at: .immediate)
         state = .resolved
         speak("Okay. Resuming scanning.") { [weak self] in
@@ -75,6 +78,7 @@ final class EmergencyAssistant: ObservableObject {
 
     func reset() {
         stopListening()
+        stopBystanderGuidance()
         synthesizer.stopSpeaking(at: .immediate)
         state = .idle
     }
@@ -215,35 +219,54 @@ final class EmergencyAssistant: ObservableObject {
         let contactName = emergencyContactName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !contactNumber.isEmpty {
-            // Has emergency contact — announce and call
+            // Has emergency contact — call immediately, then guide bystanders
+            callEmergencyContact(contactNumber)
             let nameOrNumber = contactName.isEmpty ? contactNumber : contactName
-            speak("No response detected. Calling \(nameOrNumber) for help. Tap the screen to cancel.") { [weak self] in
-                guard let self, self.state == .escalated else { return }
-                self.callEmergencyContact(contactNumber)
+            let guidance = "Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call \(nameOrNumber) for help."
+            speak(guidance) { [weak self] in
+                self?.startBystanderGuidance(message: guidance)
             }
         } else {
             // No contact — loud alert for bystanders
-            speak("No response detected. If someone is nearby, this person may need help. Tap the screen to dismiss this alert.") { [weak self] in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in
-                    guard let self, self.state == .escalated else { return }
-                    self.speak("This person may need assistance. Please check on them.")
-                }
+            let guidance = "Emergency. This person has fallen and is not responding. If someone is nearby, please help this person."
+            speak(guidance) { [weak self] in
+                self?.startBystanderGuidance(message: guidance)
             }
         }
     }
 
-    private func callEmergencyContact(_ number: String) {
-        // Strip non-numeric characters except + for international prefix
-        let cleaned = number.filter { $0.isNumber || $0 == "+" }
-        guard let url = URL(string: "tel://\(cleaned)") else {
-            print("[Emergency] Invalid phone number: \(number)")
-            return
+    private func startBystanderGuidance(message: String) {
+        bystanderTimer?.invalidate()
+        bystanderTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+            guard let self, self.state == .escalated else {
+                self?.bystanderTimer?.invalidate()
+                self?.bystanderTimer = nil
+                return
+            }
+            self.speak(message)
         }
+    }
 
-        DispatchQueue.main.async {
-            UIApplication.shared.open(url) { success in
-                if !success {
-                    print("[Emergency] Failed to open phone URL")
+    private func stopBystanderGuidance() {
+        bystanderTimer?.invalidate()
+        bystanderTimer = nil
+    }
+
+    private func callEmergencyContact(_ number: String) {
+        let cleaned = number.filter { $0.isNumber || $0 == "+" }
+
+        let callController = CXCallController()
+        let handle = CXHandle(type: .phoneNumber, value: cleaned)
+        let startCallAction = CXStartCallAction(call: UUID(), handle: handle)
+
+        let transaction = CXTransaction(action: startCallAction)
+        callController.request(transaction) { error in
+            if let error {
+                print("[Emergency] CallKit failed: \(error), falling back to tel://")
+                // Fallback to tel:// if CallKit fails
+                guard let url = URL(string: "tel://\(cleaned)") else { return }
+                DispatchQueue.main.async {
+                    UIApplication.shared.open(url)
                 }
             }
         }
