@@ -23,7 +23,7 @@ final class StairDetector {
         guard let baseAddress = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
         let floatBuffer = baseAddress.assumingMemoryBound(to: Float32.self)
 
-        var confidenceBuffer: UnsafePointer<UInt8>?
+        var confidenceBuffer: UnsafeMutablePointer<UInt8>?
         if let confMap = confidenceMap {
             CVPixelBufferLockBaseAddress(confMap, .readOnly)
             if let confBase = CVPixelBufferGetBaseAddress(confMap) {
