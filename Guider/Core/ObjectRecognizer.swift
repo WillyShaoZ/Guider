@@ -124,7 +124,7 @@ final class ObjectRecognizer: ObservableObject {
                    self.matchesSceneQuery(text) {
                     self.stopListening()
                     DispatchQueue.main.async {
-                        self.recognize()
+                        self.state = .result("Yes")
                     }
                     return
                 }
