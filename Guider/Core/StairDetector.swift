@@ -16,6 +16,8 @@ final class StairDetector {
 
         let width = CVPixelBufferGetWidth(depthMap)
         let height = CVPixelBufferGetHeight(depthMap)
+        // FIX 1: Use bytesPerRow to account for row padding, not bare width
+        let depthStride = CVPixelBufferGetBytesPerRow(depthMap) / MemoryLayout<Float32>.size
 
         CVPixelBufferLockBaseAddress(depthMap, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
@@ -24,10 +26,12 @@ final class StairDetector {
         let floatBuffer = baseAddress.assumingMemoryBound(to: Float32.self)
 
         var confidenceBuffer: UnsafeMutablePointer<UInt8>?
+        var confStride = 0
         if let confMap = confidenceMap {
             CVPixelBufferLockBaseAddress(confMap, .readOnly)
             if let confBase = CVPixelBufferGetBaseAddress(confMap) {
                 confidenceBuffer = confBase.assumingMemoryBound(to: UInt8.self)
+                confStride = CVPixelBufferGetBytesPerRow(confMap)
             }
         }
         defer {
@@ -47,10 +51,12 @@ final class StairDetector {
             var sum: Float = 0
             var count = 0
             for x in stride(from: marginX, to: endX, by: 2) {
-                let idx = y * width + x
-                let depth = floatBuffer[idx]
+                let depthIdx = y * depthStride + x
+                let depth = floatBuffer[depthIdx]
                 if depth.isNaN || depth <= 0 || depth > 5.0 { continue }
-                if let conf = confidenceBuffer, conf[idx] < 1 { continue }
+                if let conf = confidenceBuffer {
+                    if conf[y * confStride + x] < 1 { continue }
+                }
                 sum += depth
                 count += 1
             }
@@ -78,6 +84,7 @@ final class StairDetector {
     }
 
     /// Pure function: detect repeating step pattern in mean-depth scanlines.
+    /// Stairs produce a monotonic profile with periodic same-sign depth spikes (risers).
     static func detectStairPattern(scanlineDepths: [Float]) -> (detected: Bool, confidence: Float) {
         guard scanlineDepths.count >= 5 else { return (false, 0) }
 
@@ -87,26 +94,37 @@ final class StairDetector {
             gradients.append(scanlineDepths[i + 1] - scanlineDepths[i])
         }
 
-        // Find sign changes with magnitude filter
-        var signChangeIndices: [Int] = []
-        for i in 0..<(gradients.count - 1) {
-            let current = gradients[i]
-            let next = gradients[i + 1]
-            // Sign change with sufficient magnitude
-            if current * next < 0 {
-                let magnitude = max(abs(current), abs(next))
-                if magnitude >= 0.05 && magnitude <= 0.3 {
-                    signChangeIndices.append(i + 1)
-                }
+        let minStepHeight: Float = 0.05  // 5 cm — minimum riser height
+        let maxStepHeight: Float = 0.30  // 30 cm — maximum riser height
+
+        // FIX 2: Collect all sharp gradient spikes (riser candidates)
+        var spikeIndices: [Int] = []
+        var spikeValues: [Float] = []
+        for i in 0..<gradients.count {
+            let g = gradients[i]
+            if abs(g) >= minStepHeight && abs(g) <= maxStepHeight {
+                spikeIndices.append(i)
+                spikeValues.append(g)
             }
         }
 
-        guard signChangeIndices.count >= 3 else { return (false, 0) }
+        guard spikeIndices.count >= 3 else { return (false, 0) }
 
-        // Check regularity of intervals
+        // Enforce same-sign: a real staircase has risers all going the same direction.
+        // Keep only spikes matching the dominant sign.
+        let positiveCount = spikeValues.filter { $0 > 0 }.count
+        let dominantPositive = positiveCount >= spikeValues.count - positiveCount
+
+        let filteredIndices = zip(spikeIndices, spikeValues)
+            .filter { dominantPositive ? $0.1 > 0 : $0.1 < 0 }
+            .map { $0.0 }
+
+        guard filteredIndices.count >= 3 else { return (false, 0) }
+
+        // Check regularity of intervals between spikes
         var intervals: [Int] = []
-        for i in 0..<(signChangeIndices.count - 1) {
-            intervals.append(signChangeIndices[i + 1] - signChangeIndices[i])
+        for i in 0..<(filteredIndices.count - 1) {
+            intervals.append(filteredIndices[i + 1] - filteredIndices[i])
         }
 
         guard !intervals.isEmpty else { return (false, 0) }
@@ -121,7 +139,7 @@ final class StairDetector {
         let isRegular = stdDev < meanInterval * 0.3
 
         if isRegular {
-            let confidence = min(1.0, Float(signChangeIndices.count) / 5.0)
+            let confidence = min(1.0, Float(filteredIndices.count) / 5.0)
             return (true, confidence)
         }
 
