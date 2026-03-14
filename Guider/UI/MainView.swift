@@ -26,6 +26,9 @@ struct MainView: View {
         .onTapGesture(count: 1) {
             handleTap()
         }
+        .onLongPressGesture(minimumDuration: 0.8) {
+            switchMode()
+        }
         .onAppear {
             startUp()
         }
@@ -443,11 +446,11 @@ struct MainView: View {
 
     private var accessibilityHint: String {
         if appState.isEmergencyActive {
-            return "Tap to dismiss the emergency alert."
+            return "Tap to dismiss the emergency alert. Long press to switch modes."
         }
         if appState.currentMode == .daily {
-            return "Tap to ask what you are looking at."
+            return "Tap to ask what you are looking at. Long press to switch modes."
         }
-        return "Tap to pause or resume scanning."
+        return "Tap to pause or resume scanning. Long press to switch modes."
     }
 }
