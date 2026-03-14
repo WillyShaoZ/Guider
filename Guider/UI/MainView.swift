@@ -266,10 +266,7 @@ struct MainView: View {
     private func triggerVoiceAssistant() {
         if objectRecognizer.isFinished || objectRecognizer.state == .idle {
             objectRecognizer.reset()
-            speak("Ask what am I looking at.")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                objectRecognizer.startVoiceAssistant()
-            }
+            objectRecognizer.startVoiceAssistant()
         }
     }
 
