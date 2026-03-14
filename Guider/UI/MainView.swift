@@ -68,7 +68,7 @@ struct MainView: View {
         }
         .onChange(of: objectRecognizer.state) { _, newState in
             if case .result(let description) = newState {
-                speak("I see: \(description)")
+                speak(description)
             } else if case .error(let msg) = newState {
                 speak(msg)
             }
@@ -175,7 +175,7 @@ struct MainView: View {
 
                 Spacer()
 
-                Text("Tap to identify an object")
+                Text("Tap, then ask what am I looking at")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.secondary)
 
@@ -233,7 +233,7 @@ struct MainView: View {
             toggleScanning()
         } else {
             // Daily mode — trigger object recognition
-            triggerObjectRecognition()
+            triggerVoiceAssistant()
         }
     }
 
@@ -248,7 +248,7 @@ struct MainView: View {
             stopScanning()
             objectRecognizer.reset()
             appState.currentMode = .daily
-            speak("Daily mode. Tap to identify objects.")
+            speak("Daily mode. Tap and ask what am I looking at.")
         } else {
             // Switch to navigation mode
             objectRecognizer.reset()
@@ -260,13 +260,12 @@ struct MainView: View {
 
     // MARK: - Object Recognition
 
-    private func triggerObjectRecognition() {
+    private func triggerVoiceAssistant() {
         if objectRecognizer.isFinished || objectRecognizer.state == .idle {
             objectRecognizer.reset()
-            speak("Identifying...")
-            // Small delay so voice doesn't overlap with camera
+            speak("Ask what am I looking at.")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                objectRecognizer.recognize()
+                objectRecognizer.startVoiceAssistant()
             }
         }
     }
@@ -368,6 +367,7 @@ struct MainView: View {
     private var dailyModeIcon: String {
         switch objectRecognizer.state {
         case .idle: return "camera.fill"
+        case .listening: return "waveform.circle.fill"
         case .capturing: return "camera.shutter.button"
         case .recognizing: return "sparkle.magnifyingglass"
         case .result: return "checkmark.circle.fill"
@@ -378,6 +378,7 @@ struct MainView: View {
     private var dailyModeColor: Color {
         switch objectRecognizer.state {
         case .idle: return .blue
+        case .listening: return .purple
         case .capturing, .recognizing: return .orange
         case .result: return .green
         case .error: return .red
@@ -386,7 +387,8 @@ struct MainView: View {
 
     private var dailyModeStatusText: String {
         switch objectRecognizer.state {
-        case .idle: return "Ready to Identify"
+        case .idle: return "Ready to Listen"
+        case .listening: return "Listening..."
         case .capturing: return "Capturing..."
         case .recognizing: return "Recognizing..."
         case .result: return "Identified"
@@ -444,7 +446,7 @@ struct MainView: View {
             return "Tap to dismiss the emergency alert."
         }
         if appState.currentMode == .daily {
-            return "Tap to identify an object."
+            return "Tap to ask what you are looking at."
         }
         return "Tap to pause or resume scanning."
     }

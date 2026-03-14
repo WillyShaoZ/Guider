@@ -1,6 +1,7 @@
 import ARKit
 import AVFoundation
 import Combine
+import Speech
 
 final class LiDARSessionManager: NSObject, ObservableObject {
     let session = ARSession()
@@ -11,6 +12,7 @@ final class LiDARSessionManager: NSObject, ObservableObject {
     @Published var isLiDARAvailable = false
     @Published var cameraPermission: AVAuthorizationStatus
     @Published var micPermission: AVAuthorizationStatus
+    @Published var speechPermission: SFSpeechRecognizerAuthorizationStatus
     @Published var groundPlaneY: Float?
 
     // Adaptive frame rate
@@ -18,12 +20,15 @@ final class LiDARSessionManager: NSObject, ObservableObject {
     private var frameCounter = 0
 
     var allPermissionsGranted: Bool {
-        cameraPermission == .authorized && micPermission == .authorized
+        cameraPermission == .authorized &&
+        micPermission == .authorized &&
+        speechPermission == .authorized
     }
 
     override init() {
         cameraPermission = AVCaptureDevice.authorizationStatus(for: .video)
         micPermission = AVCaptureDevice.authorizationStatus(for: .audio)
+        speechPermission = SFSpeechRecognizer.authorizationStatus()
         super.init()
         isLiDARAvailable = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
         session.delegate = self
@@ -39,11 +44,21 @@ final class LiDARSessionManager: NSObject, ObservableObject {
         await MainActor.run {
             micPermission = micGranted ? .authorized : .denied
         }
+
+        let speechStatus = await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status)
+            }
+        }
+        await MainActor.run {
+            speechPermission = speechStatus
+        }
     }
 
     func refreshPermissions() {
         cameraPermission = AVCaptureDevice.authorizationStatus(for: .video)
         micPermission = AVCaptureDevice.authorizationStatus(for: .audio)
+        speechPermission = SFSpeechRecognizer.authorizationStatus()
     }
 
     func start() {

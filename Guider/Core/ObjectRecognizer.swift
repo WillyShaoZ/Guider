@@ -2,10 +2,12 @@ import AVFoundation
 import Vision
 import CoreML
 import UIKit
+import Speech
 
 final class ObjectRecognizer: ObservableObject {
     enum State: Equatable {
         case idle
+        case listening
         case capturing
         case recognizing
         case result(String)
@@ -19,11 +21,40 @@ final class ObjectRecognizer: ObservableObject {
     private var delegate: PhotoDelegate?
     private var vnModel: VNCoreMLModel?
 
+    private var audioEngine: AVAudioEngine?
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private var listenTimer: Timer?
+
+    private let listenTimeout: TimeInterval = 6.0
+    private let supportedQueries = [
+        "what am i looking at",
+        "what am i seeing",
+        "what do you see",
+        "what is this",
+        "what's this",
+        "describe this",
+        "describe what you see",
+        "look at this"
+    ]
+
     init() {
         loadModel()
     }
 
-    /// Take a photo and recognize the object in it
+    func startVoiceAssistant() {
+        guard state == .idle || isFinished else { return }
+
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
+            state = .error("Speech recognition is not available. Please enable it in Settings.")
+            return
+        }
+
+        state = .listening
+        startListeningForPrompt()
+    }
+
     func recognize() {
         guard state == .idle || isFinished else { return }
         state = .capturing
@@ -31,6 +62,7 @@ final class ObjectRecognizer: ObservableObject {
     }
 
     func reset() {
+        stopListening()
         tearDownCamera()
         state = .idle
     }
@@ -54,6 +86,94 @@ final class ObjectRecognizer: ObservableObject {
         } catch {
             print("[ObjectRecognizer] Failed to load model: \(error)")
         }
+    }
+
+    // MARK: - Speech Input
+
+    private func startListeningForPrompt() {
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            state = .error("Speech recognition is currently unavailable.")
+            return
+        }
+
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers])
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+
+            let audioEngine = AVAudioEngine()
+            let request = SFSpeechAudioBufferRecognitionRequest()
+            request.shouldReportPartialResults = true
+
+            let inputNode = audioEngine.inputNode
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+                self?.recognitionRequest?.append(buffer)
+            }
+
+            self.audioEngine = audioEngine
+            self.recognitionRequest = request
+
+            audioEngine.prepare()
+            try audioEngine.start()
+
+            recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+                guard let self else { return }
+
+                if let text = result?.bestTranscription.formattedString.lowercased(),
+                   self.matchesSceneQuery(text) {
+                    self.stopListening()
+                    DispatchQueue.main.async {
+                        self.recognize()
+                    }
+                    return
+                }
+
+                if error != nil || result?.isFinal == true {
+                    DispatchQueue.main.async {
+                        self.stopListening()
+                        self.state = .error("Ask: what am I looking at?")
+                    }
+                }
+            }
+
+            listenTimer = Timer.scheduledTimer(withTimeInterval: listenTimeout, repeats: false) { [weak self] _ in
+                guard let self, self.state == .listening else { return }
+                self.stopListening()
+                self.state = .error("I didn't hear a question. Ask: what am I looking at?")
+            }
+        } catch {
+            stopListening()
+            state = .error("Could not start listening.")
+        }
+    }
+
+    private func stopListening() {
+        listenTimer?.invalidate()
+        listenTimer = nil
+
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
+
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    private func matchesSceneQuery(_ text: String) -> Bool {
+        if supportedQueries.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let mentionsQuestion = text.contains("what") || text.contains("describe")
+        let mentionsVision = text.contains("looking") || text.contains("see") || text.contains("this")
+        return mentionsQuestion && mentionsVision
     }
 
     // MARK: - Camera
@@ -82,7 +202,6 @@ final class ObjectRecognizer: ObservableObject {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             session.startRunning()
-            // Wait for auto-focus and auto-exposure
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 self?.takePhoto()
             }
@@ -121,7 +240,7 @@ final class ObjectRecognizer: ObservableObject {
         }
     }
 
-    // MARK: - MobileNetV2 Classification
+    // MARK: - Image Understanding
 
     private func classifyImage(_ image: CGImage) {
         DispatchQueue.main.async { self.state = .recognizing }
@@ -154,25 +273,19 @@ final class ObjectRecognizer: ObservableObject {
                 return
             }
 
-            // Top result with readable name
             let topResults = results
                 .prefix(3)
                 .filter { $0.confidence > 0.05 }
-                .map { observation -> String in
+                .map { observation -> (label: String, confidence: Int) in
                     let name = observation.identifier
                         .components(separatedBy: ",")
                         .first?
                         .trimmingCharacters(in: .whitespaces) ?? observation.identifier
-                    let confidence = Int(observation.confidence * 100)
-                    return "\(name) \(confidence)%"
+                    let cleanedName = name.replacingOccurrences(of: "_", with: " ")
+                    return (cleanedName, Int(observation.confidence * 100))
                 }
 
-            let description: String
-            if topResults.isEmpty {
-                description = "Cannot identify this object"
-            } else {
-                description = topResults.joined(separator: ", ")
-            }
+            let description = self.buildSpokenDescription(from: topResults)
 
             DispatchQueue.main.async {
                 self.state = .result(description)
@@ -186,11 +299,26 @@ final class ObjectRecognizer: ObservableObject {
             try? handler.perform([request])
         }
     }
+
+    private func buildSpokenDescription(from topResults: [(label: String, confidence: Int)]) -> String {
+        guard let bestMatch = topResults.first else {
+            return "I'm not confident enough to describe this scene."
+        }
+
+        if topResults.count == 1 {
+            return "This looks like \(bestMatch.label). Confidence \(bestMatch.confidence) percent."
+        }
+
+        let alternatives = topResults
+            .dropFirst()
+            .map { "\($0.label) \($0.confidence) percent" }
+            .joined(separator: ", ")
+
+        return "This looks like \(bestMatch.label). Confidence \(bestMatch.confidence) percent. Other possibilities: \(alternatives)."
+    }
 }
 
-// MARK: - Photo Capture Delegate
-
-private class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     let completion: (CGImage?) -> Void
 
     init(completion: @escaping (CGImage?) -> Void) {

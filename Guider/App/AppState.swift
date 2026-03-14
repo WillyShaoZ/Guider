@@ -20,6 +20,7 @@ final class AppState: ObservableObject {
     var hapticEnabled = true
     var audioEnabled = true
     var voiceEnabled = true
+    @AppStorage("sensitivity") var sensitivity = 1.0
 
     // Emergency
     @AppStorage("emergencyContact") var emergencyContact: String = ""
