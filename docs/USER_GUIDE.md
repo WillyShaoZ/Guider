@@ -4,7 +4,7 @@
 
 Guider is an iOS app that helps visually impaired users navigate safely. Wear your iPhone on your chest with a lanyard — the app uses LiDAR to detect obstacles ahead and alerts you through vibration and voice.
 
-Guider also has a Daily Mode that identifies objects using AI.
+Guider also has a mode called Object Scan that identifies objects using AI.
 
 ---
 
@@ -43,7 +43,7 @@ When an obstacle enters the Danger zone, you'll hear a voice announcement: *"Obs
 
 **Stair Detection**: The app also detects stairs ahead and alerts you with a distinct double-tap vibration pattern.
 
-### Daily Mode
+### Object Scan
 
 Point the phone at an object and **tap the screen**. The app takes a photo, identifies what's in front of you, and speaks the result.
 
@@ -56,10 +56,10 @@ The app automatically detects your network status and switches between online an
 
 ## Controls
 
-| Gesture | Navigation Mode | Daily Mode |
+| Gesture | Navigation Mode | Object Scan |
 |---------|----------------|------------|
 | **Tap screen** | Pause / Resume scanning | Identify object |
-| **Long press (0.8s)** | Switch to Daily Mode | Switch to Navigation Mode |
+| **Long press (0.8s)** | Switch to Object Scan | Switch to Navigation Mode |
 
 That's it — just **tap** and **long press**. No buttons to find.
 
@@ -75,6 +75,7 @@ If the phone detects a fall (e.g. you drop it or fall), it will:
 4. If you say **"yes"**, **"okay"**, or **"fine"** → resumes scanning
 5. If you say **"help"** or **don't respond**:
    - Auto-dials your emergency contact
+   - Opens SMS composer with prefilled text: *"Emergency alert from Guider. I may have fallen and need help."*
    - **Repeats every 10 seconds**: *"Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call [contact name] for help."*
    - This bystander guidance continues until someone nearby taps the call button or you tap to dismiss
 6. If **no emergency contact** is set → plays loud alert: *"This person has fallen. If someone is nearby, please help."*
@@ -115,7 +116,7 @@ The app switches automatically — you don't need to do anything. If Gemini fail
 - **Outdoors in direct sunlight**: LiDAR range may be reduced. Stay alert.
 - **Battery**: continuous scanning uses about 30-40% per hour. Charge before going out.
 
-### Daily Mode
+### Object Scan
 
 - **Hold the object 20-50 cm from the camera** for best results
 - **Good lighting helps** — the flash will turn on automatically if needed
@@ -157,7 +158,7 @@ Guider is designed for visually impaired users:
 ## Privacy
 
 - **Navigation mode** is fully on-device — no data sent anywhere
-- **Daily mode (online)** sends a photo to Google's Gemini API for recognition — the image is not stored
-- **Daily mode (offline)** is fully on-device — no data sent anywhere
+- **Object Scan (online)** sends a photo to Google's Gemini API for recognition — the image is not stored
+- **Object Scan (offline)** is fully on-device — no data sent anywhere
 - **No analytics, no tracking, no data collection**
-- Camera is only active during scanning (Navigation) or when you tap to identify (Daily)
+- Camera is only active during scanning (Navigation) or when you tap to identify (Object Scan)

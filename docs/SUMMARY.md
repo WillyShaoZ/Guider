@@ -55,9 +55,9 @@ Guider is a LiDAR-based obstacle detection iOS app for visually impaired users. 
 - High contrast white-on-black design, tap to advance
 - AVSpeechSynthesizer auto-speaks each step
 
-### 8. Daily Mode — AI Object Recognition (New)
+### 8. Object Scan — AI Object Recognition (New)
 
-- **Removed voice input requirement** — Daily Mode now uses simple tap to identify:
+- **Removed voice input requirement** — Object Scan now uses simple tap to identify:
   - Tap screen → camera captures → AI identifies → voice announces result
   - No "what am I looking at" speech recognition needed
 - **Online mode (Gemini API)** — rich natural language descriptions via `GeminiVisionService`:

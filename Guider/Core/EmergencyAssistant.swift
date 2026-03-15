@@ -37,6 +37,8 @@ final class EmergencyAssistant: ObservableObject {
     private var listenTimer: Timer?
     private let listenTimeout: TimeInterval = 10.0
     private var bystanderTimer: Timer?
+    private let emergencySmsMessage = "Emergency alert from Guider. I may have fallen and need help."
+    private var didSendEmergencySms = false
 
     private let positiveKeywords = ["yes", "yeah", "okay", "ok", "fine", "good", "i'm okay", "i'm fine", "i'm good", "all good"]
     private let helpKeywords = ["help", "no", "emergency", "call", "fall", "fell", "hurt"]
@@ -49,6 +51,7 @@ final class EmergencyAssistant: ObservableObject {
         // 1. Strong haptic burst
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.warning)
+        didSendEmergencySms = false
 
         // Additional strong haptic after short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -68,6 +71,7 @@ final class EmergencyAssistant: ObservableObject {
         stopListening()
         stopBystanderGuidance()
         synthesizer.stopSpeaking(at: .immediate)
+        didSendEmergencySms = false
         state = .resolved
         speak("Okay. Resuming scanning.") { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -80,6 +84,7 @@ final class EmergencyAssistant: ObservableObject {
         stopListening()
         stopBystanderGuidance()
         synthesizer.stopSpeaking(at: .immediate)
+        didSendEmergencySms = false
         state = .idle
     }
 
@@ -219,8 +224,8 @@ final class EmergencyAssistant: ObservableObject {
         let contactName = emergencyContactName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !contactNumber.isEmpty {
-            // Has emergency contact — call immediately, then guide bystanders
             callEmergencyContact(contactNumber)
+            sendEmergencySMS(to: contactNumber)
             let nameOrNumber = contactName.isEmpty ? contactNumber : contactName
             let guidance = "Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call \(nameOrNumber) for help."
             speak(guidance) { [weak self] in
@@ -231,6 +236,33 @@ final class EmergencyAssistant: ObservableObject {
             let guidance = "Emergency. This person has fallen and is not responding. If someone is nearby, please help this person."
             speak(guidance) { [weak self] in
                 self?.startBystanderGuidance(message: guidance)
+            }
+        }
+    }
+
+    private func sendEmergencySMS(to number: String) {
+        guard !didSendEmergencySms else { return }
+        didSendEmergencySms = true
+
+        let cleaned = number.filter { $0.isNumber || $0 == "+" }
+
+        var components = URLComponents()
+        components.scheme = "sms"
+        components.path = cleaned
+        components.queryItems = [
+            URLQueryItem(name: "body", value: emergencySmsMessage)
+        ]
+
+        guard let url = components.url else {
+            print("[Emergency] Failed to build SMS URL")
+            return
+        }
+
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url) { success in
+                if !success {
+                    print("[Emergency] Failed to open SMS composer")
+                }
             }
         }
     }

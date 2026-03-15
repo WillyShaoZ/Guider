@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hackathon project: LiDAR-based obstacle detection iOS app for visually impaired users. Phone worn on chest, scans ahead, provides haptic/audio feedback. Daily mode identifies objects via Gemini AI (online) or Apple Vision (offline).
+Hackathon project: LiDAR-based obstacle detection iOS app for visually impaired users. Phone worn on chest, scans ahead, provides haptic/audio feedback. Object Scan identifies objects via Gemini AI (online) or Apple Vision (offline).
 
 ## Tech Stack
 
@@ -35,8 +35,8 @@ Guider/
 ## Architecture
 
 Navigation: `LiDAR → ARKit Depth Map → 3x3 Grid Sampling → Zone Classification → Haptic/Audio Feedback`
-Daily (Online): `Camera → JPEG → Gemini API → Description → Voice`
-Daily (Offline): `Camera → JPEG → Apple Vision → Labels → Voice`
+Object Scan (Online): `Camera → JPEG → Gemini API → Description → Voice`
+Object Scan (Offline): `Camera → JPEG → Apple Vision → Labels → Voice`
 Emergency: `ARKit Camera Transform → Drop Detection → Voice Prompt → Speech Recognition → Call / Bystander Loop`
 
 Four distance zones:
@@ -66,7 +66,7 @@ Four distance zones:
 
 ## Controls
 
-- **Tap**: pause/resume (navigation) or identify object (daily)
+- **Tap**: pause/resume (navigation) or identify object (Object Scan)
 - **Long press (0.8s)**: switch modes
 
 ## Testing
