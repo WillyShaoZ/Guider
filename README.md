@@ -98,6 +98,10 @@ To set up:
 <dict>
 	<key>GEMINI_API_KEY</key>
 	<string>YOUR_API_KEY_HERE</string>
+	<key>EMERGENCY_SMS_WEBHOOK_URL</key>
+	<string>https://your-server.com/api/send-emergency-sms</string>
+	<key>EMERGENCY_SMS_AUTH_TOKEN</key>
+	<string>optional-bearer-token</string>
 </dict>
 </plist>
 ```
@@ -105,6 +109,7 @@ To set up:
 3. Make sure `Secrets.plist` is visible in Xcode's project navigator under the Guider folder
 
 > **Note:** Without the API key, Object Scan will automatically use offline recognition (Apple Vision). Online mode provides much richer descriptions.
+> **Note:** For hands-free emergency SMS, set `EMERGENCY_SMS_WEBHOOK_URL` to a backend endpoint that accepts JSON `{ "to": "...", "message": "..." }` and sends SMS server-side.
 
 ### 3. Build & Run
 

@@ -75,7 +75,7 @@ If the phone detects a fall (e.g. you drop it or fall), it will:
 4. If you say **"yes"**, **"okay"**, or **"fine"** → resumes scanning
 5. If you say **"help"** or **don't respond**:
    - Auto-dials your emergency contact
-   - Opens SMS composer with prefilled text: *"Emergency alert from Guider. I may have fallen and need help."*
+   - Sends hands-free SMS immediately with your location when `EMERGENCY_SMS_WEBHOOK_URL` is configured; otherwise opens the SMS composer prefilled with: *"Emergency alert from Guider. I may have fallen and need help."*
    - **Repeats every 10 seconds**: *"Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call [contact name] for help."*
    - This bystander guidance continues until someone nearby taps the call button or you tap to dismiss
 6. If **no emergency contact** is set → plays loud alert: *"This person has fallen. If someone is nearby, please help."*

@@ -3,6 +3,7 @@ import Speech
 import Combine
 import UIKit
 import CallKit
+import CoreLocation
 
 /// Handles the emergency flow after a phone drop is detected.
 ///
@@ -13,7 +14,7 @@ import CallKit
 /// 4. If "yes" / "okay" / "fine" → resume normal scanning
 /// 5. If "help" / no response / unclear → escalate (announce emergency message)
 /// 6. User can also tap to dismiss at any time
-final class EmergencyAssistant: ObservableObject {
+final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDelegate {
     enum State: Equatable {
         case idle
         case asking       // Speaking the prompt
@@ -37,11 +38,29 @@ final class EmergencyAssistant: ObservableObject {
     private var listenTimer: Timer?
     private let listenTimeout: TimeInterval = 10.0
     private var bystanderTimer: Timer?
-    private let emergencySmsMessage = "Emergency alert from Guider. I may have fallen and need help."
+    private let emergencySmsMessage = "Emergency alert from Guider. I may have fallen and need help"
     private var didSendEmergencySms = false
+    private let locationManager = CLLocationManager()
+    private var locationCompletion: ((String?) -> Void)?
+    private var locationTimeoutTimer: Timer?
+    private let locationTimeout: TimeInterval = 3.0
+    private let emergencySmsWebhook: String
+    private let emergencySmsAuthToken: String
 
     private let positiveKeywords = ["yes", "yeah", "okay", "ok", "fine", "good", "i'm okay", "i'm fine", "i'm good", "all good"]
     private let helpKeywords = ["help", "no", "emergency", "call", "fall", "fell", "hurt"]
+
+    override init() {
+        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path) {
+            emergencySmsWebhook = (dict["EMERGENCY_SMS_WEBHOOK_URL"] as? String) ?? ""
+            emergencySmsAuthToken = (dict["EMERGENCY_SMS_AUTH_TOKEN"] as? String) ?? ""
+        } else {
+            emergencySmsWebhook = ""
+            emergencySmsAuthToken = ""
+        }
+        super.init()
+    }
 
     // MARK: - Public
 
@@ -52,6 +71,7 @@ final class EmergencyAssistant: ObservableObject {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.warning)
         didSendEmergencySms = false
+        locationManager.delegate = self
 
         // Additional strong haptic after short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -72,6 +92,7 @@ final class EmergencyAssistant: ObservableObject {
         stopBystanderGuidance()
         synthesizer.stopSpeaking(at: .immediate)
         didSendEmergencySms = false
+        clearLocationState()
         state = .resolved
         speak("Okay. Resuming scanning.") { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -85,6 +106,7 @@ final class EmergencyAssistant: ObservableObject {
         stopBystanderGuidance()
         synthesizer.stopSpeaking(at: .immediate)
         didSendEmergencySms = false
+        clearLocationState()
         state = .idle
     }
 
@@ -245,12 +267,69 @@ final class EmergencyAssistant: ObservableObject {
         didSendEmergencySms = true
 
         let cleaned = number.filter { $0.isNumber || $0 == "+" }
+        resolveCurrentLocation { [weak self] locationText in
+            guard let self else { return }
 
+            let base = self.emergencySmsMessage
+            let emergencyText = locationText == nil ? base : "\(base). Current location: \(locationText!)"
+
+            self.sendEmergencySMSViaWebhook(to: cleaned, message: emergencyText) { [weak self] success in
+                guard let self else { return }
+                if !success {
+                    self.openSmsComposer(to: cleaned, message: emergencyText)
+                }
+            }
+        }
+    }
+
+    private func sendEmergencySMSViaWebhook(to number: String, message: String, completion: @escaping (Bool) -> Void) {
+        guard !emergencySmsWebhook.isEmpty, let webhookURL = URL(string: emergencySmsWebhook) else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: webhookURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !emergencySmsAuthToken.isEmpty {
+            request.setValue("Bearer \(emergencySmsAuthToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let body: [String: String] = [
+            "to": number,
+            "message": message
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error {
+                print("[Emergency] Webhook send failed: \(error)")
+                completion(false)
+                return
+            }
+
+            guard let response, let httpResponse = response as? HTTPURLResponse else {
+                print("[Emergency] Webhook response missing")
+                completion(false)
+                return
+            }
+
+            guard 200...299 ~= httpResponse.statusCode else {
+                print("[Emergency] Webhook failed with status \(httpResponse.statusCode)")
+                completion(false)
+                return
+            }
+
+            completion(true)
+        }.resume()
+    }
+
+    private func openSmsComposer(to number: String, message: String) {
         var components = URLComponents()
         components.scheme = "sms"
-        components.path = cleaned
+        components.path = number
         components.queryItems = [
-            URLQueryItem(name: "body", value: emergencySmsMessage)
+            URLQueryItem(name: "body", value: message)
         ]
 
         guard let url = components.url else {
@@ -265,6 +344,71 @@ final class EmergencyAssistant: ObservableObject {
                 }
             }
         }
+    }
+
+    private func resolveCurrentLocation(completion: @escaping (String?) -> Void) {
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+
+        locationCompletion = completion
+        locationTimeoutTimer?.invalidate()
+        locationTimeoutTimer = Timer.scheduledTimer(withTimeInterval: locationTimeout, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            guard let locationCompletion else { return }
+            self.clearLocationState()
+            locationCompletion(nil)
+        }
+
+        let status = locationManager.authorizationStatus()
+        if status == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+            return
+        }
+
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else {
+            guard let completion = locationCompletion else { return }
+            clearLocationState()
+            completion(nil)
+            return
+        }
+
+        locationManager.requestLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+
+        let lat = String(format: "%.6f", location.coordinate.latitude)
+        let lon = String(format: "%.6f", location.coordinate.longitude)
+        let messageLocation = "\(lat), \(lon) (https://maps.apple.com/?ll=\(lat),\(lon))"
+
+        guard let completion = locationCompletion else { return }
+        clearLocationState()
+        completion(messageLocation)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard let completion = locationCompletion else { return }
+        clearLocationState()
+        completion(nil)
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus()
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+            manager.requestLocation()
+        } else if status == .denied || status == .restricted {
+            guard let completion = locationCompletion else { return }
+            clearLocationState()
+            completion(nil)
+        }
+    }
+
+    private func clearLocationState() {
+        locationCompletion = nil
+        locationTimeoutTimer?.invalidate()
+        locationTimeoutTimer = nil
+        locationManager.delegate = nil
     }
 
     private func startBystanderGuidance(message: String) {
