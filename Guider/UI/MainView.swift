@@ -11,6 +11,7 @@ struct MainView: View {
     @StateObject private var emergencyAssistant = EmergencyAssistant()
     @StateObject private var objectRecognizer = ObjectRecognizer()
     @State private var synthesizer = AVSpeechSynthesizer()
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -28,6 +29,14 @@ struct MainView: View {
         }
         .onLongPressGesture(minimumDuration: 0.8) {
             switchMode()
+        }
+        .onTapGesture(count: 3) {
+            showSettings = true
+            speak("Opening settings.")
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environmentObject(appState)
         }
         .onAppear {
             startUp()
@@ -307,6 +316,7 @@ struct MainView: View {
         feedbackManager.stop()
         emergencyAssistant.emergencyContact = appState.emergencyContact
         emergencyAssistant.emergencyContactName = appState.emergencyContactName
+        emergencyAssistant.userName = appState.userName
         emergencyAssistant.trigger()
     }
 

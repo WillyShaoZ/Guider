@@ -26,6 +26,8 @@
 	<string>Guider uses speech recognition to understand your response during emergency assistance checks.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Guider needs access to your contacts to find your emergency contact by name.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Guider uses your location to include it in emergency messages sent to your emergency contact.</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arkit</string>

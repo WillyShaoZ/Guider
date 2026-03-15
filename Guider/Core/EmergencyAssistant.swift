@@ -24,9 +24,12 @@ final class EmergencyAssistant: ObservableObject {
 
     @Published var state: State = .idle
 
-    /// Set before triggering — the phone number to call on escalation
+    /// Set before triggering
     var emergencyContact: String = ""
     var emergencyContactName: String = ""
+    var userName: String = ""
+
+    private let smsService = EmergencySMSService()
 
     private let synthesizer = AVSpeechSynthesizer()
     private var audioEngine: AVAudioEngine?
@@ -219,10 +222,18 @@ final class EmergencyAssistant: ObservableObject {
         let contactName = emergencyContactName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !contactNumber.isEmpty {
-            // Has emergency contact — call immediately, then guide bystanders
+            // Has emergency contact — send SMS automatically, then call, then guide bystanders
+            smsService.sendEmergencySMS(
+                to: contactNumber,
+                userName: userName,
+                contactName: contactName
+            ) { success in
+                print("[Emergency] SMS sent: \(success)")
+            }
+
             callEmergencyContact(contactNumber)
             let nameOrNumber = contactName.isEmpty ? contactNumber : contactName
-            let guidance = "Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call \(nameOrNumber) for help."
+            let guidance = "Emergency. This person has fallen and is not responding. An emergency message has been sent. Please tap the blue Call button on screen to call \(nameOrNumber) for help."
             speak(guidance) { [weak self] in
                 self?.startBystanderGuidance(message: guidance)
             }

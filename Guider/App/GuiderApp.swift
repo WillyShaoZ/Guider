@@ -1,13 +1,16 @@
 import SwiftUI
 import AVFoundation
+import CoreLocation
 
 @main
 struct GuiderApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var lidarManager = LiDARSessionManager()
+    private let locationManager = CLLocationManager()
 
     init() {
         configureAudioSession()
+        locationManager.requestWhenInUseAuthorization()
     }
 
     var body: some Scene {

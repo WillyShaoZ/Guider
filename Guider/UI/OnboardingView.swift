@@ -10,15 +10,19 @@ struct OnboardingView: View {
 
     private let introSteps: [(icon: String, text: String, speech: String)] = [
         ("lidar.iphone", "Welcome to Guider",
-         "Welcome to Guider. This app detects obstacles using your phone's LiDAR sensor."),
-        ("figure.stand", "Wear on Your Chest",
-         "Wear your phone on your chest. It scans ahead and alerts you with vibration and sound."),
+         "Welcome to Guider. This app helps visually impaired users navigate safely using your phone's LiDAR sensor."),
+        ("figure.stand", "Navigation Mode",
+         "Wear your phone on your chest. It scans ahead and alerts you with vibration and sound. Tap the screen to pause or resume scanning."),
         ("gauge.with.dots.needle.33percent", "4 Distance Zones",
-         "4 zones: Safe is clear. Caution gives a light pulse. Warning gives medium vibration. Danger gives strong vibration and voice alert."),
-        ("hand.tap", "Simple Controls",
-         "Tap anywhere to pause or resume. Long press to switch modes."),
+         "4 distance zones. Safe means the path is clear. Caution gives a light pulse. Warning gives a medium vibration. Danger gives a strong vibration and a voice alert telling you the direction."),
         ("stairs", "Stair Detection",
-         "The app also detects stairs with a special double-tap vibration."),
+         "The app also detects stairs ahead with a special double-tap vibration and a voice alert."),
+        ("camera.fill", "Daily Mode",
+         "Daily mode lets you identify objects. Long press the screen to switch to Daily mode. Then tap to take a photo. The app will describe what's in front of you. It works with internet for detailed descriptions, or offline for basic labels."),
+        ("hand.tap", "Simple Controls",
+         "Only two gestures. Tap the screen to pause, resume, or identify objects. Long press for about one second to switch between Navigation and Daily mode."),
+        ("exclamationmark.triangle", "Drop Detection",
+         "If the phone detects a fall, it will ask if you are okay. Say yes if you are fine. Say help or stay silent, and it will call your emergency contact. Nearby people will also hear a voice asking them to help."),
     ]
 
     // Total steps = intro steps + emergency contact step + final step

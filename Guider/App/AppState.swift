@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     @AppStorage("sensitivity") var sensitivity = 1.0
 
     // Emergency
+    @AppStorage("userName") var userName: String = ""
     @AppStorage("emergencyContact") var emergencyContact: String = ""
     @AppStorage("emergencyContactName") var emergencyContactName: String = ""
     @AppStorage("dropDetectionEnabled") var dropDetectionEnabled = true

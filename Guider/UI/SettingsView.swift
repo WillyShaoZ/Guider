@@ -1,16 +1,28 @@
 import SwiftUI
 import AVFoundation
 
-/// Minimal settings — only emergency contact setup.
-/// All other settings (haptic, audio, voice) are always on.
+/// Settings for emergency contact and user profile.
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
-    @State private var synthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         NavigationView {
             Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Your Name")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        TextField("e.g. John", text: $appState.userName)
+                            .textContentType(.name)
+                            .accessibilityLabel("Your name")
+                            .accessibilityHint("Used in emergency messages so your contact knows who needs help")
+                    }
+                } header: {
+                    Text("Your Profile")
+                }
+
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Emergency Contact Name")
@@ -25,7 +37,7 @@ struct SettingsView: View {
                         Text("Emergency Phone Number")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        TextField("e.g. +1 234 567 8900", text: $appState.emergencyContact)
+                        TextField("e.g. +61 400 123 456", text: $appState.emergencyContact)
                             .keyboardType(.phonePad)
                             .textContentType(.telephoneNumber)
                             .accessibilityLabel("Emergency phone number")
@@ -48,7 +60,10 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                     }
                 } header: {
-                    Text("Emergency Assistance")
+                    Text("Emergency Contact")
+                } footer: {
+                    Text("When a fall is detected and you don't respond, an SMS with your GPS location will be sent automatically to this contact.")
+                        .font(.caption)
                 }
             }
             .navigationTitle("Settings")
