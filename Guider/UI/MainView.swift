@@ -11,6 +11,7 @@ struct MainView: View {
     @StateObject private var emergencyAssistant = EmergencyAssistant()
     @StateObject private var objectRecognizer = ObjectRecognizer()
     @State private var synthesizer = AVSpeechSynthesizer()
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -23,11 +24,19 @@ struct MainView: View {
             }
         }
         .contentShape(Rectangle())
+        .onTapGesture(count: 3) {
+            showSettings = true
+            speak("Opening settings.")
+        }
         .onTapGesture(count: 1) {
             handleTap()
         }
         .onLongPressGesture(minimumDuration: 0.8) {
             switchMode()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environmentObject(appState)
         }
         .onAppear {
             startUp()
