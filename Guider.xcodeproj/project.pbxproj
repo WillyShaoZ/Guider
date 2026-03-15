@@ -32,6 +32,7 @@
 		CC3D4E5F60718293A4B5C6D7 /* StairDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD4E5F60718293A4B5C6D7E8 /* StairDetector.swift */; };
 		EE5F60718293A4B5C6D7E8F9 /* MotionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF60718293A4B5C6D7E8F901 /* MotionClassifier.swift */; };
 		A1B2C3D4E5F607182930A4B5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F607182930A4B5C6 /* OnboardingView.swift */; };
+		BBCC2233DDEEFF0011223344 /* Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 33445566AABBCCDD77889900 /* Secrets.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -172,6 +173,7 @@
 			buildConfigurationList = 34C43DE0EDA2183D91AAF6DA /* Build configuration list for PBXNativeTarget "Guider" */;
 			buildPhases = (
 				A5547BF877E4080FEF524422 /* Sources */,
+				AABB1122CCDDEEFF00112233 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -246,6 +248,17 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AABB1122CCDDEEFF00112233 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BBCC2233DDEEFF0011223344 /* Secrets.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
 		112E8681F4E8ED7B2C18A9BB /* Debug */ = {
