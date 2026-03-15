@@ -359,7 +359,7 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
             locationCompletion(nil)
         }
 
-        let status = locationManager.authorizationStatus()
+        let status = locationManager.authorizationStatus
         if status == .notDetermined {
             locationManager.requestWhenInUseAuthorization()
             return
@@ -380,7 +380,7 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
 
         let lat = String(format: "%.6f", location.coordinate.latitude)
         let lon = String(format: "%.6f", location.coordinate.longitude)
-        let messageLocation = "\(lat), \(lon) (https://maps.apple.com/?ll=\(lat),\(lon))"
+        let messageLocation = "\(lat), \(lon) (https://maps.google.com/?q=\(lat),\(lon))"
 
         guard let completion = locationCompletion else { return }
         clearLocationState()
@@ -394,7 +394,7 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        let status = manager.authorizationStatus()
+        let status = manager.authorizationStatus
         if status == .authorizedWhenInUse || status == .authorizedAlways {
             manager.requestLocation()
         } else if status == .denied || status == .restricted {
