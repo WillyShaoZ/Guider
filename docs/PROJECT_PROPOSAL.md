@@ -141,11 +141,12 @@ Guider/
 |---------|----------------|------------|
 | **Tap screen** | Pause / Resume scanning | Identify object |
 | **Long press (0.8s)** | Switch to Object Scan | Switch to Navigation Mode |
+| **Triple-tap** | Open Settings | Open Settings |
 
 Design principles:
 - **No buttons to find** — the entire screen is the touch target
 - **All state changes voice-announced** — user never needs to see the screen
-- **Two gestures only** — tap and long press, nothing else to learn
+- **Three simple gestures** — tap, long press, and triple-tap
 
 ---
 
@@ -165,10 +166,10 @@ Listen for 10 seconds (SFSpeechRecognizer)
 ┌─── "yes" / "okay" / "fine" → Resume scanning
 ├─── "help" / no response → Escalate:
 │      ↓
-│    Dial emergency contact (system call confirmation)
+│    Send SMS with GPS location (via webhook or system SMS)
 │      ↓
 │    Loop every 10s: "Emergency. This person has fallen.
-│    Please tap the blue Call button on screen."
+│    An emergency SMS has been sent. Please help this person."
 │      (guides bystanders to help unconscious user)
 └─── Tap screen → Dismiss, resume scanning
 ```
@@ -191,7 +192,7 @@ Listen for 10 seconds (SFSpeechRecognizer)
 | **Stair detection accuracy** | Medium — critical safety feature | Depth gradient analysis + temporal filtering (3 consecutive frames) |
 | **Feedback latency** | High — delay = danger | Target <50ms; pre-load haptic patterns; avoid main thread blocking |
 | **Haptic engine invalidation** | Medium — stops after background | Auto-restart on foreground; nil-check before play |
-| **Unconscious user emergency** | High — can't tap call button | Bystander guidance loop every 10s via voice |
+| **Unconscious user emergency** | High — can't interact with phone | Auto-SMS with GPS + bystander guidance loop every 10s |
 | **Offline object recognition** | Medium — no internet available | Apple Vision on-device fallback; auto-switch via NWPathMonitor |
 
 ---
@@ -214,4 +215,4 @@ Listen for 10 seconds (SFSpeechRecognizer)
 | Battery life during continuous use | > 2 hours |
 | Object recognition (online) | Natural language descriptions |
 | Object recognition (offline) | Top-3 category labels |
-| Emergency response time | < 15 seconds from drop to call |
+| Emergency response time | < 15 seconds from drop to SMS |

@@ -84,7 +84,8 @@ Guider is a LiDAR-based obstacle detection iOS app for visually impaired users. 
   - After escalation, app repeats every 10 seconds: "Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call [name] for help."
   - Designed for nearby people to help when user is unconscious and cannot confirm the call
   - Loop stops when call is confirmed or user taps to dismiss
-- **CallKit integration** — uses `CXStartCallAction` to initiate calls, falls back to `tel://`
+- **Emergency SMS** — sends SMS with GPS location (Google Maps link) via webhook, falls back to system SMS app
+- Removed phone call functionality — SMS only for emergency contact notification
 
 ### 10. Interaction Model Update (New)
 
@@ -93,6 +94,18 @@ Guider is a LiDAR-based obstacle detection iOS app for visually impaired users. 
 - **New controls**: tap (pause/identify) + long press 0.8s (switch modes)
 - Updated `AppIntents.swift` — removed `SwitchModeIntent` and notification extensions
 - Kept `OpenGuiderIntent` for "Hey Siri, open Guider"
+
+### 12. Emergency SMS & Settings Access (New)
+
+- **Emergency SMS via webhook** — sends SMS with GPS coordinates and Google Maps link on fall detection
+  - Webhook URL and auth token loaded from `Secrets.plist` (`EMERGENCY_SMS_WEBHOOK_URL`, `EMERGENCY_SMS_AUTH_TOKEN`)
+  - Falls back to opening system SMS app if webhook is not configured or fails
+  - Includes current location via `CLLocationManager` with 3-second timeout
+  - Duplicate send protection (`didSendEmergencySms` flag)
+- **Triple-tap to open Settings** — accessible from any mode to change name and emergency contact
+- **Location permission** — `NSLocationWhenInUseUsageDescription` added to Info.plist
+- **Secrets.plist bundled** — added to Copy Bundle Resources build phase so API keys load at runtime
+- **Removed CallKit** — no phone call functionality, SMS only
 
 ### 11. Bug Fixes (New)
 
@@ -149,6 +162,6 @@ Input: ARFrame.camera.transform (4x4 matrix, device pose in world space)
 ```
 Drop detected → Haptic burst → "Are you okay?" → Listen 10s
   ├── Positive response → Resume scanning
-  ├── "Help" or timeout → Dial contact + bystander guidance loop (every 10s)
+  ├── "Help" or timeout → SMS (webhook + GPS) + bystander guidance loop (every 10s)
   └── Tap screen → Dismiss
 ```

@@ -332,7 +332,7 @@ struct MainView: View {
         case .escalated:
             if appState.hasEmergencyContact {
                 let name = appState.emergencyContactName.isEmpty ? appState.emergencyContact : appState.emergencyContactName
-                return "No response. Calling \(name)."
+                return "No response. Sending emergency SMS to \(name)."
             }
             return "No response. Alerting nearby people."
         }

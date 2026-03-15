@@ -27,8 +27,9 @@ Guider turns an iPhone Pro into a wearable navigation assistant. Wear it on your
 - **Phone drop detection** using ARKit camera position tracking
 - Voice prompt: "Are you okay? Say yes, or say help."
 - **Speech recognition** listens for response (10 second window)
-- If no response or "help": auto-calls emergency contact
-- **Bystander guidance loop**: repeats "Please tap the blue Call button on screen" every 10 seconds for nearby people to help unconscious users
+- If no response or "help": **auto-sends SMS** with GPS location (Google Maps link) to emergency contact
+- SMS sent via webhook (configurable in Secrets.plist), falls back to opening the system SMS app
+- **Bystander guidance loop**: repeats emergency message every 10 seconds for nearby people to help
 - Loud bystander alert if no emergency contact is set
 
 ### Emergency Contact Setup (Onboarding)
@@ -37,9 +38,13 @@ Guider turns an iPhone Pro into a wearable navigation assistant. Wear it on your
 - Voice confirms: "I found Mom, phone number 0412345678. Say yes to confirm."
 - Long press to skip — can be set up later
 
+### Settings Access
+- **Triple-tap screen** — opens Settings to change name and emergency contact
+
 ### Accessibility-First Design
 - **No buttons to find** — tap anywhere to interact
 - **Long press** to switch between Navigation and Object Scan modes
+- **Triple-tap** to open Settings
 - All state changes voice-announced
 - Full VoiceOver support
 - High contrast UI for low-vision users
@@ -50,6 +55,7 @@ Guider turns an iPhone Pro into a wearable navigation assistant. Wear it on your
 |---------|----------------|------------|
 | **Tap screen** | Pause / Resume scanning | Identify object |
 | **Long press (0.8s)** | Switch to Object Scan | Switch to Navigation Mode |
+| **Triple-tap** | Open Settings | Open Settings |
 
 ## Tech Stack
 
@@ -65,12 +71,14 @@ Guider turns an iPhone Pro into a wearable navigation assistant. Wear it on your
 | Voice | AVSpeechSynthesizer |
 | Speech Recognition | Speech framework |
 | Contacts | Contacts framework |
+| Location | CoreLocation (GPS for emergency SMS) |
+| Emergency SMS | Webhook API + system SMS fallback |
 
 ## Requirements
 
 - **iPhone Pro 12 or later** (LiDAR required for Navigation mode)
 - **iOS 17.0+**
-- Camera, microphone, speech recognition, and contacts permissions
+- Camera, microphone, speech recognition, contacts, and location permissions
 
 ## Setup
 
@@ -99,9 +107,9 @@ To set up:
 	<key>GEMINI_API_KEY</key>
 	<string>YOUR_API_KEY_HERE</string>
 	<key>EMERGENCY_SMS_WEBHOOK_URL</key>
-	<string>https://your-server.com/api/send-emergency-sms</string>
+	<string>YOUR_WEBHOOK_URL_HERE</string>
 	<key>EMERGENCY_SMS_AUTH_TOKEN</key>
-	<string>optional-bearer-token</string>
+	<string>YOUR_AUTH_TOKEN_HERE</string>
 </dict>
 </plist>
 ```
@@ -109,7 +117,8 @@ To set up:
 3. Make sure `Secrets.plist` is visible in Xcode's project navigator under the Guider folder
 
 > **Note:** Without the API key, Object Scan will automatically use offline recognition (Apple Vision). Online mode provides much richer descriptions.
-> **Note:** For hands-free emergency SMS, set `EMERGENCY_SMS_WEBHOOK_URL` to a backend endpoint that accepts JSON `{ "to": "...", "message": "..." }` and sends SMS server-side.
+>
+> **Emergency SMS:** The webhook URL and auth token are used to send emergency SMS messages with GPS location. Without them, the app falls back to opening the system SMS app.
 
 ### 3. Build & Run
 
@@ -171,7 +180,7 @@ Object Scan (Offline):
   Camera → JPEG → Apple Vision VNClassifyImageRequest → Top Labels → Voice Announcement
 
 Emergency:
-  ARKit Camera Transform → Y-Position Drop → Voice Prompt → Speech Recognition → Call / Bystander Alert Loop
+  ARKit Camera Transform → Y-Position Drop → Voice Prompt → Speech Recognition → SMS (webhook + GPS) / Bystander Alert Loop
 ```
 
 ## Docs

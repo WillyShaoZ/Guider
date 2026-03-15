@@ -2,7 +2,6 @@ import AVFoundation
 import Speech
 import Combine
 import UIKit
-import CallKit
 import CoreLocation
 
 /// Handles the emergency flow after a phone drop is detected.
@@ -25,7 +24,7 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
 
     @Published var state: State = .idle
 
-    /// Set before triggering — the phone number to call on escalation
+    /// Set before triggering
     var emergencyContact: String = ""
     var emergencyContactName: String = ""
 
@@ -246,10 +245,10 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
         let contactName = emergencyContactName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !contactNumber.isEmpty {
-            callEmergencyContact(contactNumber)
+            // Has emergency contact — send SMS, then guide bystanders
             sendEmergencySMS(to: contactNumber)
             let nameOrNumber = contactName.isEmpty ? contactNumber : contactName
-            let guidance = "Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call \(nameOrNumber) for help."
+            let guidance = "Emergency. This person has fallen and is not responding. An emergency SMS has been sent to \(nameOrNumber). Please help this person."
             speak(guidance) { [weak self] in
                 self?.startBystanderGuidance(message: guidance)
             }
@@ -261,6 +260,8 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
             }
         }
     }
+
+    // MARK: - Emergency SMS
 
     private func sendEmergencySMS(to number: String) {
         guard !didSendEmergencySms else { return }
@@ -346,6 +347,8 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
         }
     }
 
+    // MARK: - Location
+
     private func resolveCurrentLocation(completion: @escaping (String?) -> Void) {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
@@ -411,6 +414,8 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
         locationManager.delegate = nil
     }
 
+    // MARK: - Bystander Guidance
+
     private func startBystanderGuidance(message: String) {
         bystanderTimer?.invalidate()
         bystanderTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
@@ -426,26 +431,6 @@ final class EmergencyAssistant: NSObject, ObservableObject, CLLocationManagerDel
     private func stopBystanderGuidance() {
         bystanderTimer?.invalidate()
         bystanderTimer = nil
-    }
-
-    private func callEmergencyContact(_ number: String) {
-        let cleaned = number.filter { $0.isNumber || $0 == "+" }
-
-        let callController = CXCallController()
-        let handle = CXHandle(type: .phoneNumber, value: cleaned)
-        let startCallAction = CXStartCallAction(call: UUID(), handle: handle)
-
-        let transaction = CXTransaction(action: startCallAction)
-        callController.request(transaction) { error in
-            if let error {
-                print("[Emergency] CallKit failed: \(error), falling back to tel://")
-                // Fallback to tel:// if CallKit fails
-                guard let url = URL(string: "tel://\(cleaned)") else { return }
-                DispatchQueue.main.async {
-                    UIApplication.shared.open(url)
-                }
-            }
-        }
     }
 
     private func stopListening() {

@@ -60,8 +60,9 @@ The app automatically detects your network status and switches between online an
 |---------|----------------|------------|
 | **Tap screen** | Pause / Resume scanning | Identify object |
 | **Long press (0.8s)** | Switch to Object Scan | Switch to Navigation Mode |
+| **Triple-tap** | Open Settings | Open Settings |
 
-That's it — just **tap** and **long press**. No buttons to find.
+That's it — just **tap**, **long press**, and **triple-tap**. No buttons to find.
 
 ---
 
@@ -74,10 +75,10 @@ If the phone detects a fall (e.g. you drop it or fall), it will:
 3. **Listen for 10 seconds**
 4. If you say **"yes"**, **"okay"**, or **"fine"** → resumes scanning
 5. If you say **"help"** or **don't respond**:
-   - Auto-dials your emergency contact
-   - Sends hands-free SMS immediately with your location when `EMERGENCY_SMS_WEBHOOK_URL` is configured; otherwise opens the SMS composer prefilled with: *"Emergency alert from Guider. I may have fallen and need help."*
-   - **Repeats every 10 seconds**: *"Emergency. This person has fallen and is not responding. Please tap the blue Call button on screen to call [contact name] for help."*
-   - This bystander guidance continues until someone nearby taps the call button or you tap to dismiss
+   - **Automatically sends an SMS** to your emergency contact with your GPS location and a Google Maps link
+   - If the webhook is not configured, opens the system SMS app with a pre-filled message
+   - **Repeats every 10 seconds**: *"Emergency. This person has fallen and is not responding. An emergency SMS has been sent to [contact name]. Please help this person."*
+   - This bystander guidance continues until you tap to dismiss
 6. If **no emergency contact** is set → plays loud alert: *"This person has fallen. If someone is nearby, please help."*
 
 ### Setting Up Emergency Contact
@@ -90,7 +91,7 @@ If the phone detects a fall (e.g. you drop it or fall), it will:
 5. Long press to skip
 
 **Later:**
-You can also set it manually in the Settings view — accessible through the app.
+**Triple-tap** the screen at any time to open Settings and change your name or emergency contact.
 
 ---
 
@@ -151,7 +152,7 @@ Guider is designed for visually impaired users:
 | Object recognition gives basic labels only | You're in offline mode — connect to internet for detailed AI descriptions |
 | Drop detection triggers too often | This can happen during vigorous movement — tap the screen to dismiss |
 | Vibration stops after switching apps | Leave and re-enter the app — the haptic engine restarts automatically |
-| Emergency call shows confirmation dialog | This is an iOS security requirement — nearby people can tap the Call button for you |
+| Emergency SMS not sending | Check that `EMERGENCY_SMS_WEBHOOK_URL` is set in Secrets.plist. Without it, the app opens the system SMS app instead |
 
 ---
 
@@ -160,5 +161,6 @@ Guider is designed for visually impaired users:
 - **Navigation mode** is fully on-device — no data sent anywhere
 - **Object Scan (online)** sends a photo to Google's Gemini API for recognition — the image is not stored
 - **Object Scan (offline)** is fully on-device — no data sent anywhere
+- **Emergency SMS** sends your GPS location to your emergency contact only when a fall is detected and you don't respond
 - **No analytics, no tracking, no data collection**
 - Camera is only active during scanning (Navigation) or when you tap to identify (Object Scan)
