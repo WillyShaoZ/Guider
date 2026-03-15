@@ -6,7 +6,7 @@
 
 Guider is a native iOS app that uses the iPhone's LiDAR sensor to detect obstacles in real-time and deliver haptic/audio feedback to visually impaired users. The phone is worn on the chest via a lanyard mount, continuously scanning the environment ahead — functioning like a parking radar for pedestrians.
 
-It also features a Daily Mode with AI-powered object recognition (Gemini API online, Apple Vision offline) and an emergency assistance system with drop detection.
+It also features an Object Scan mode with AI-powered object recognition (Gemini API online, Apple Vision offline) and an emergency assistance system with drop detection.
 
 **Target device**: iPhone Pro (12 Pro and later) with LiDAR scanner.
 
@@ -137,10 +137,10 @@ Guider/
 
 ## 7. Interaction Model
 
-| Gesture | Navigation Mode | Daily Mode |
+| Gesture | Navigation Mode | Object Scan |
 |---------|----------------|------------|
 | **Tap screen** | Pause / Resume scanning | Identify object |
-| **Long press (0.8s)** | Switch to Daily Mode | Switch to Navigation Mode |
+| **Long press (0.8s)** | Switch to Object Scan | Switch to Navigation Mode |
 
 Design principles:
 - **No buttons to find** — the entire screen is the touch target

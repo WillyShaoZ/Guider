@@ -16,7 +16,7 @@ Guider turns an iPhone Pro into a wearable navigation assistant. Wear it on your
 - Ground plane filtering via ARKit to reduce false positives
 - **Adaptive frame rate** — faster scanning when walking, slower when stationary
 
-### Daily Mode
+### Object Scan
 - **Tap to identify** — camera captures and recognizes what's in front of you
 - **Online mode**: Gemini AI provides detailed natural language descriptions
 - **Offline mode**: Apple Vision framework classifies 1000+ object categories on-device
@@ -39,17 +39,17 @@ Guider turns an iPhone Pro into a wearable navigation assistant. Wear it on your
 
 ### Accessibility-First Design
 - **No buttons to find** — tap anywhere to interact
-- **Long press** to switch between Navigation and Daily modes
+- **Long press** to switch between Navigation and Object Scan modes
 - All state changes voice-announced
 - Full VoiceOver support
 - High contrast UI for low-vision users
 
 ## Controls
 
-| Gesture | Navigation Mode | Daily Mode |
+| Gesture | Navigation Mode | Object Scan |
 |---------|----------------|------------|
 | **Tap screen** | Pause / Resume scanning | Identify object |
-| **Long press (0.8s)** | Switch to Daily Mode | Switch to Navigation Mode |
+| **Long press (0.8s)** | Switch to Object Scan | Switch to Navigation Mode |
 
 ## Tech Stack
 
@@ -98,13 +98,18 @@ To set up:
 <dict>
 	<key>GEMINI_API_KEY</key>
 	<string>YOUR_API_KEY_HERE</string>
+	<key>EMERGENCY_SMS_WEBHOOK_URL</key>
+	<string>https://your-server.com/api/send-emergency-sms</string>
+	<key>EMERGENCY_SMS_AUTH_TOKEN</key>
+	<string>optional-bearer-token</string>
 </dict>
 </plist>
 ```
 
 3. Make sure `Secrets.plist` is visible in Xcode's project navigator under the Guider folder
 
-> **Note:** Without the API key, Daily Mode will automatically use offline recognition (Apple Vision). Online mode provides much richer descriptions.
+> **Note:** Without the API key, Object Scan will automatically use offline recognition (Apple Vision). Online mode provides much richer descriptions.
+> **Note:** For hands-free emergency SMS, set `EMERGENCY_SMS_WEBHOOK_URL` to a backend endpoint that accepts JSON `{ "to": "...", "message": "..." }` and sends SMS server-side.
 
 ### 3. Build & Run
 
@@ -159,10 +164,10 @@ Navigation Mode:
   LiDAR → ARKit Depth Map → 3x3 Grid Sampling → Zone Classification → Haptic/Voice Feedback
   ARKit Plane Anchors → Stair Detection → Double-tap Vibration Alert
 
-Daily Mode (Online):
+Object Scan (Online):
   Camera → JPEG → Gemini API → Natural Language Description → Voice Announcement
 
-Daily Mode (Offline):
+Object Scan (Offline):
   Camera → JPEG → Apple Vision VNClassifyImageRequest → Top Labels → Voice Announcement
 
 Emergency:

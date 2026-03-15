@@ -144,7 +144,7 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Daily Mode View
+    // MARK: - Object Scan View
 
     private var dailyModeView: some View {
         ZStack {
@@ -155,7 +155,7 @@ struct MainView: View {
                 Spacer()
 
                 // Mode indicator
-                Text("Daily Mode")
+                Text("Object Scan")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
                     .textCase(.uppercase)
@@ -238,7 +238,7 @@ struct MainView: View {
         } else if appState.currentMode == .navigation {
             toggleScanning()
         } else {
-            // Daily mode — trigger object recognition
+        // Object scan mode — trigger object recognition
             triggerObjectRecognition()
         }
     }
@@ -250,11 +250,11 @@ struct MainView: View {
         generator.impactOccurred()
 
         if appState.currentMode == .navigation {
-            // Switch to daily mode
+            // Switch to object scan mode
             stopScanning()
             objectRecognizer.reset()
             appState.currentMode = .daily
-            speak("Daily mode. Tap to identify objects.")
+            speak("Object Scan. Tap to identify objects.")
         } else {
             // Switch to navigation mode
             objectRecognizer.reset()
@@ -368,7 +368,7 @@ struct MainView: View {
         synthesizer.speak(utterance)
     }
 
-    // MARK: - Daily Mode Helpers
+    // MARK: - Object Scan Helpers
 
     private var dailyModeIcon: String {
         switch objectRecognizer.state {
@@ -433,7 +433,7 @@ struct MainView: View {
             return "Emergency. \(emergencyStatusText)"
         }
         if appState.currentMode == .daily {
-            return "Daily mode. \(dailyModeStatusText)"
+            return "Object scan mode. \(dailyModeStatusText)"
         }
         if !appState.isScanning {
             return "Guider is paused."
